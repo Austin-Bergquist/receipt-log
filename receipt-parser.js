@@ -3,6 +3,8 @@
   Part of Receipt Log. See CHANGELOG.md for full history.
 
   VERSION HISTORY (newest first)
+  v2.0.1  2026-10-17  iPhone fix: removed regex lookbehind, which iOS
+                      Safari before 16.4 can't parse (broke the whole app).
   v2.0.0  2026-10-16  First version. Finds total, date, vendor, category,
                       and cash/check payment from raw OCR text. Learns from
                       vendors already in the log (spelling + last category).
@@ -59,8 +61,9 @@
   // Fix common OCR slips inside numbers: O->0, l/I->1, S->5 when surrounded by digits
   function cleanNumbers(line) {
     return line
-      .replace(/(?<=\d)[oO](?=\d)|(?<=[\d.,])[oO](?=\d)/g, "0")
-      .replace(/(?<=\d)[lI|](?=\d)/g, "1")
+      // (no lookbehind: older iPhones can't run it)
+      .replace(/([\d.,])[oO](?=\d)/g, "$10")
+      .replace(/(\d)[lI|](?=\d)/g, "$11")
       .replace(/(\d)\s*[.,]\s*(\d{2})(?!\d)/g, "$1.$2");      // "12 .34" / "12,34" -> "12.34"
   }
 

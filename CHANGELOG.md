@@ -4,6 +4,12 @@ Every past build is kept in `versions/`. To roll back, copy an older file over
 `index.html` (and `receipt-parser.js` if one is listed), upload, and bump `CACHE`
 in `sw.js` so phones pick it up. Receipts stored on your devices are not affected.
 
+## v2.0.1 — 2026-10-17 — iPhone fix
+- Receipt reader used a regex lookbehind, which iOS Safari before 16.4 can't parse; that stopped the
+  whole app on older iPhones. Rewritten without it (same results).
+- Startup errors now show in red under the title instead of leaving a dead page.
+- Files: `versions/receipt-log-v2.0.1.html`, `versions/receipt-parser-v2.0.1.js`
+
 ## v2.0.0 — 2026-10-16 — Standalone app
 - Moved out of Claude into an installable web app (phone home screen + PC install).
 - Works fully offline. Receipts and images saved on each device (IndexedDB).
