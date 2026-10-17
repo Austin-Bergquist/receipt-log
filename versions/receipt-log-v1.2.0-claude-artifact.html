@@ -1,0 +1,449 @@
+<title>Receipt Log</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--
+  RECEIPT LOG
+  =================================================================
+  VERSION HISTORY (newest first) — to roll back, republish an older
+  copy of this file; receipt records live in the artifact database
+  and are not affected by page versions.
+
+  v1.2.0  2026-10-16  Auto-detect: after a photo or PDF is attached, Claude
+                      reads it and fills amount, vendor, date, category,
+                      payment and a short note. Only fills fields you
+                      haven't typed in; filled fields are highlighted.
+                      PDFs: first page rendered with pdf.js for reading.
+  v1.1.0  2026-10-16  Attachment: separate "Take photo" (opens camera) and
+                      "Choose file" (image or PDF) buttons; PDF receipts
+                      supported; tap thumbnail to open attachment.
+  v1.0.0  2026-10-16  Initial build: quick entry (amount, vendor, date,
+                      category, payment, note, photo), month/YTD totals,
+                      search + category filter, edit/delete, CSV export.
+  =================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: single column ledger — entry slip on top, totals strip, running list grouped by month */
+:root{
+  --bg:#eef1f2; --surface:#ffffff; --ink:#15201f; --muted:#5c6b6a; --line:#d5dcdc;
+  --accent:#1f6f5c; --accent-ink:#ffffff; --accent-soft:#dcece7; --danger:#b3372b; --danger-soft:#f6e1de;
+  --font-ui:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101716; --surface:#18211f; --ink:#e6eeec; --muted:#93a3a0; --line:#2b3835;
+  --accent:#4cbf9f; --accent-ink:#06231b; --accent-soft:#1d3a32; --danger:#f0806f; --danger-soft:#3b211d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101716; --surface:#18211f; --ink:#e6eeec; --muted:#93a3a0; --line:#2b3835;
+  --accent:#4cbf9f; --accent-ink:#06231b; --accent-soft:#1d3a32; --danger:#f0806f; --danger-soft:#3b211d; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:24px;font-weight:800;letter-spacing:-.01em;margin:0;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+
+/* Totals */
+.totals{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.totals div{background:var(--surface);padding:12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.totals .num{font-size:18px;font-weight:600}
+
+/* Entry slip */
+form.slip{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:14px}
+.slip-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.slip-head strong{font-size:15px}
+.amount-row{display:flex;align-items:center;gap:6px;border-bottom:2px solid var(--ink);padding-bottom:4px}
+.amount-row span{font-family:var(--font-num);font-size:30px;color:var(--muted)}
+#amount{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font-family:var(--font-num);font-size:34px;font-weight:600;padding:2px 0;outline:none}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:440px){.grid2{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+input[type=text],input[type=date],select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 11px;min-height:44px}
+textarea{min-height:60px;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:7px 12px;font:inherit;font-size:13.5px;cursor:pointer;min-height:36px}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.photo-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.photo-row a{display:inline-flex}
+.photo-row img,.pdf-badge{width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.pdf-badge{display:inline-flex;align-items:center;justify-content:center;background:var(--danger-soft);color:var(--danger);font-family:var(--font-num);font-weight:600;font-size:13px}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 14px;min-height:44px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:16px}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn.small{min-height:36px;padding:6px 11px;font-size:13px}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions .primary{flex:1}
+.err{color:var(--danger);font-size:13px}
+.auto{background:var(--accent-soft)!important;border-color:var(--accent)!important}
+.amount-row.auto{background:transparent!important}
+#amount.auto{color:var(--accent)}
+.detect{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.detect.ok{color:var(--accent);font-weight:600}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);flex:none}
+@media (prefers-reduced-motion:no-preference){.spin{animation:sp .8s linear infinite}}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* List */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toolbar input{flex:1 1 180px}
+.toolbar select{flex:0 1 170px}
+.month{display:flex;flex-direction:column;gap:6px}
+.month-head{display:flex;justify-content:space-between;align-items:baseline;padding:0 2px}
+.rows{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.row{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:11px 12px;border-top:1px solid var(--line);cursor:pointer;background:transparent;width:100%;text-align:left;font:inherit;color:inherit;border-left:0;border-right:0;border-bottom:0}
+.row:first-child{border-top:0}
+.row:hover{background:var(--accent-soft)}
+.row .day{font-family:var(--font-num);font-size:12px;color:var(--muted);line-height:1.2;text-align:center}
+.row .day b{display:block;font-size:17px;color:var(--ink);font-weight:600}
+.row .who{min-width:0}
+.row .vendor{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .meta{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .amt{font-family:var(--font-num);font-weight:600;font-size:15px}
+.tag{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--ink);font-size:11.5px;margin-right:4px}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:22px;text-align:center;color:var(--muted)}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--danger-soft);border-radius:8px;padding:10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+footer{color:var(--muted);font-size:12px;text-align:center}
+@media (prefers-reduced-motion:no-preference){.row{transition:background .12s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Receipt Log</h1>
+      <div class="sub" id="status">Connecting…</div>
+    </div>
+    <button class="btn small ghost" id="exportBtn" type="button" hidden>Export CSV</button>
+  </header>
+
+  <section class="totals" aria-label="Totals">
+    <div><span class="label" id="monthLabel">This month</span><span class="num" id="tMonth">$0.00</span></div>
+    <div><span class="label" id="yearLabel">Year to date</span><span class="num" id="tYear">$0.00</span></div>
+    <div><span class="label">Receipts</span><span class="num" id="tCount">0</span></div>
+  </section>
+
+  <form class="slip" id="slip" autocomplete="off" novalidate>
+    <div class="slip-head"><strong id="formTitle">New receipt</strong><button class="btn small ghost" type="button" id="cancelEdit" hidden>Cancel edit</button></div>
+    <div class="field">
+      <label class="label" for="amount">Amount</label>
+      <div class="amount-row"><span>$</span><input id="amount" type="text" inputmode="decimal" placeholder="0.00" aria-label="Amount in dollars"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label class="label" for="vendor">Vendor</label><input id="vendor" type="text" list="vendorList" placeholder="Where you bought it" autocapitalize="words"><datalist id="vendorList"></datalist></div>
+      <div class="field"><label class="label" for="date">Date</label><input id="date" type="date"></div>
+    </div>
+    <div class="field">
+      <span class="label" id="catLabel">Category</span>
+      <div class="chips" id="cats" role="group" aria-labelledby="catLabel"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label class="label" for="pay">Paid with</label>
+        <select id="pay"><option>Business card</option><option>Personal card</option><option>Cash</option><option>Check</option><option>Bank transfer</option><option>PayPal / Venmo</option></select></div>
+      <div class="field"><label class="label" for="note">Note (optional)</label><input id="note" type="text" placeholder="What it was for"></div>
+    </div>
+    <div class="field" id="photoField" hidden>
+      <span class="label">Receipt image (optional)</span>
+      <div class="photo-row">
+        <a id="photoLink" target="_blank" rel="noopener" hidden><img id="photoPrev" alt="Attached receipt"><span id="pdfBadge" class="pdf-badge" hidden>PDF</span></a>
+        <label class="btn small" for="photoCam">Take photo</label>
+        <input id="photoCam" type="file" accept="image/*" capture="environment" hidden>
+        <label class="btn small" for="photoFile">Choose file</label>
+        <input id="photoFile" type="file" accept="image/*,application/pdf" hidden>
+        <button class="btn small ghost" type="button" id="photoClear" hidden>Remove</button>
+        <span class="sub" id="photoMsg"></span>
+      </div>
+      <div class="detect" id="detect" hidden></div>
+    </div>
+    <div class="err" id="formErr" role="alert"></div>
+    <div class="actions">
+      <button class="btn primary" type="submit" id="saveBtn">Save receipt</button>
+      <button class="btn danger" type="button" id="deleteBtn" hidden>Delete</button>
+    </div>
+    <div class="confirm" id="confirmDel" hidden>
+      <span>Delete this receipt for good?</span>
+      <button class="btn small danger" type="button" id="confirmYes">Delete</button>
+      <button class="btn small" type="button" id="confirmNo">Keep it</button>
+    </div>
+  </form>
+
+  <section style="display:flex;flex-direction:column;gap:12px" aria-label="Receipts">
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Search vendor or note" aria-label="Search receipts">
+      <select id="filterCat" aria-label="Filter by category"><option value="">All categories</option></select>
+    </div>
+    <div id="list"><div class="empty">Your receipts will show up here, newest first, grouped by month. Enter an amount above and tap <b>Save receipt</b> to add the first one.</div></div>
+  </section>
+
+  <footer>Receipt Log v1.2.0 · tap any receipt to edit it</footer>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function(){
+  const CATEGORIES=["Materials","Tools & Equipment","Inventory","Fuel & Mileage","Shipping","Software","Office Supplies","Meals","Fees","Other"];
+  const $=id=>document.getElementById(id);
+  const money=c=>(c<0?"-":"")+"$"+(Math.abs(c)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+  const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  let db=null, assets=null, downloads=null, col=null;
+  let receipts=[]; let editingId=null; let category="Materials";
+  let photo=null; // {id,url} of uploaded photo for the current form
+  let canWrite=true;
+  let sample=null, canRead=false;          // auto-detect via Claude
+  let touched={}, autoCat=false, detectRun=0;
+  const AUTO_FIELDS={amount:"amount",vendor:"vendor",date:"date",pay:"pay",note:"note"};
+  Object.entries(AUTO_FIELDS).forEach(([k,id])=>{
+    const ev=id==="pay"||id==="date"?"change":"input";
+    $(id).addEventListener(ev,()=>{touched[k]=true;markAuto(k,false)});
+  });
+  function markAuto(k,on){const el=k==="amount"?$("amount").parentElement:$(AUTO_FIELDS[k]);el.classList.toggle("auto",on);if(k==="amount")$("amount").classList.toggle("auto",on)}
+  function clearAuto(){Object.keys(AUTO_FIELDS).forEach(k=>markAuto(k,false));autoCat=false}
+  function detectMsg(html,cls){const d=$("detect");d.hidden=!html;d.className="detect"+(cls?" "+cls:"");d.innerHTML=html||""}
+
+  // Remembered per-device convenience: last category and payment method
+  function remember(k,v){try{localStorage.setItem("rl_"+k,v)}catch(e){}}
+  function recall(k){try{return localStorage.getItem("rl_"+k)}catch(e){return null}}
+  category=recall("cat")||category; if(recall("pay")) $("pay").value=recall("pay");
+
+  // Category chips + filter
+  function drawChips(){
+    $("cats").innerHTML="";
+    CATEGORIES.forEach(c=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=c;
+      b.setAttribute("aria-pressed",String(c===category));if(c===category&&autoCat)b.classList.add("auto");
+      b.onclick=()=>{category=c;touched.cat=true;autoCat=false;drawChips()};$("cats").appendChild(b)});
+  }
+  CATEGORIES.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;$("filterCat").appendChild(o)});
+  drawChips(); $("date").value=today();
+
+  // Amount parsing: accepts "12", "12.5", "$1,204.99"
+  function parseCents(s){const t=String(s).replace(/[$,\s]/g,"");if(!/^\d+(\.\d{0,2})?$/.test(t))return null;return Math.round(parseFloat(t)*100)}
+
+  function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2200)}
+
+  function resetForm(keep){
+    editingId=null; $("amount").value=""; $("vendor").value=""; $("note").value="";
+    if(!keep) $("date").value=today();
+    setPhoto(null); $("formErr").textContent="";
+    touched={}; detectRun++; clearAuto(); detectMsg(""); drawChips();
+    $("formTitle").textContent="New receipt"; $("saveBtn").textContent="Save receipt";
+    $("cancelEdit").hidden=true; $("deleteBtn").hidden=true; $("confirmDel").hidden=true;
+  }
+  function setPhoto(p){
+    photo=p; $("photoLink").hidden=!p; $("photoClear").hidden=!p; $("photoMsg").textContent="";
+    $("photoCam").value=""; $("photoFile").value="";
+    if(p){const pdf=p.type==="pdf";$("photoLink").href=p.url;$("photoPrev").hidden=pdf;$("pdfBadge").hidden=!pdf;if(!pdf)$("photoPrev").src=p.url}
+  }
+
+  function startEdit(r){
+    editingId=r.id; $("amount").value=(r.cents/100).toFixed(2); $("vendor").value=r.vendor||""; $("date").value=r.date;
+    touched={amount:true,vendor:!!r.vendor,date:true,cat:true,pay:true,note:!!r.note}; detectRun++; clearAuto(); detectMsg("");
+    category=r.category||"Other"; drawChips(); $("pay").value=r.pay||"Business card"; $("note").value=r.note||"";
+    setPhoto(r.photoId?{id:r.photoId,url:r.photoUrl,type:r.photoType||"image"}:null);
+    $("formTitle").textContent="Edit receipt"; $("saveBtn").textContent="Save changes";
+    $("cancelEdit").hidden=false; $("deleteBtn").hidden=!canWrite; $("confirmDel").hidden=true; $("formErr").textContent="";
+    $("slip").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
+    $("amount").focus({preventScroll:true});
+  }
+
+  $("cancelEdit").onclick=()=>resetForm();
+  $("deleteBtn").onclick=()=>{$("confirmDel").hidden=false};
+  $("confirmNo").onclick=()=>{$("confirmDel").hidden=true};
+  $("confirmYes").onclick=async()=>{
+    if(!editingId||!col)return;
+    try{await col.doc(editingId).delete();toast("Receipt deleted");resetForm()}catch(e){$("formErr").textContent="Couldn't delete: "+(e.message||e.code)}
+  };
+
+  $("slip").addEventListener("submit",async ev=>{
+    ev.preventDefault();
+    const cents=parseCents($("amount").value);
+    if(cents===null||cents===0){$("formErr").textContent="Enter the receipt total, like 42.50.";$("amount").focus();return}
+    if(!$("date").value){$("formErr").textContent="Pick the date on the receipt.";return}
+    if(!col){$("formErr").textContent="Saving isn't available in this view. Open the Receipt Log while signed in.";return}
+    const rec={cents,vendor:$("vendor").value.trim(),date:$("date").value,category,pay:$("pay").value,note:$("note").value.trim(),
+      photoId:photo?photo.id:null,photoUrl:photo?photo.url:null,photoType:photo?photo.type:null,updatedAt:new Date().toISOString()};
+    $("saveBtn").disabled=true;
+    try{
+      if(editingId){await col.doc(editingId).set(Object.assign({createdAt:(receipts.find(r=>r.id===editingId)||{}).createdAt||rec.updatedAt},rec));toast("Changes saved");resetForm()}
+      else{rec.createdAt=rec.updatedAt;await col.add(rec);toast("Saved "+money(cents)+(rec.vendor?" · "+rec.vendor:""));resetForm(true);$("amount").focus()}
+      remember("cat",category); remember("pay",rec.pay);
+    }catch(e){
+      if(e.code==="invalid_argument"){canWrite=false;$("formErr").textContent="You can view these receipts but not change them."}
+      else if(e.code==="quota_exceeded"){$("formErr").textContent="The log is full. Export a CSV and delete old receipts to make room."}
+      else $("formErr").textContent="Couldn't save. Check your connection and try again.";
+    }finally{$("saveBtn").disabled=false}
+  });
+
+  // Photo: shrink to ~1600px JPEG before upload
+  async function attach(input){
+    const f=input.files[0]; if(!f||!assets)return;
+    const pdf=f.type==="application/pdf"||/\.pdf$/i.test(f.name);
+    if(!pdf&&!/^image\//.test(f.type)){$("photoMsg").textContent="Pick an image or a PDF.";input.value="";return}
+    if(pdf&&f.size>20*1024*1024){$("photoMsg").textContent="That PDF is over 20 MB. Try a smaller one.";input.value="";return}
+    $("photoMsg").textContent="Uploading…";
+    try{
+      const img=pdf?null:await shrink(f);
+      detect(pdf?f:img,pdf);                       // runs alongside the upload
+      const res=await assets.upload(pdf?f:img);
+      setPhoto({id:res.id,url:res.url,type:pdf?"pdf":"image"}); $("photoMsg").textContent="Attached";
+    }catch(e){$("photoMsg").textContent="Didn't upload. Check your connection and try again.";input.value=""}
+  }
+
+  // ---------- Auto-detect (v1.2.0) ----------
+  let pdfReady=null;
+  function loadPdfJs(){
+    if(pdfReady)return pdfReady;
+    const add=src=>new Promise((ok,bad)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=bad;document.head.appendChild(s)});
+    const base="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+    pdfReady=add(base+"pdf.min.js").then(()=>add(base+"pdf.worker.min.js")).then(()=>{
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc=base+"pdf.worker.min.js"; return window.pdfjsLib});
+    pdfReady.catch(()=>{pdfReady=null});
+    return pdfReady;
+  }
+  async function pdfToImage(file){
+    const lib=await loadPdfJs();
+    const doc=await lib.getDocument({data:await file.arrayBuffer(),disableWorker:true,isEvalSupported:false}).promise;
+    const page=await doc.getPage(1); const v1=page.getViewport({scale:1});
+    const vp=page.getViewport({scale:Math.min(2.5,1600/Math.max(v1.width,v1.height))});
+    const c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+    const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
+    await page.render({canvasContext:ctx,viewport:vp}).promise;
+    return new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",0.85));
+  }
+
+  async function detect(fileOrBlob,pdf){
+    if(!sample||!canRead)return;
+    const run=++detectRun;
+    detectMsg('<span class="spin" aria-hidden="true"></span><span>Reading receipt…</span>');
+    try{
+      const img=pdf?await pdfToImage(fileOrBlob):fileOrBlob;
+      if(run!==detectRun)return;
+      const pays=[...$("pay").options].map(o=>o.value);
+      const prompt=`The attached image is a purchase receipt (photo, screenshot or first page of a PDF invoice) for a small business expense log.
+Extract these fields and answer with ONLY a JSON object, no other text:
+{"total": number or null,        // the final amount paid in US dollars, including tax and tip; not the subtotal
+ "vendor": string or null,       // the store or company name, short and in normal capitalization, e.g. "Home Depot"
+ "date": "YYYY-MM-DD" or null,   // the purchase date printed on the receipt
+ "category": one of ${JSON.stringify(CATEGORIES)},
+ "payment": one of ${JSON.stringify(pays)} or null,  // only if the receipt shows how it was paid; a card ending shown means a card, but you cannot tell business from personal, so use null for cards
+ "paidCash": true or false,      // true only if the receipt shows cash tendered
+ "note": string or null}         // 2-6 words on what was bought, e.g. "PVC fittings and conduit"
+If the image is not a receipt or is unreadable, return {"total":null,"vendor":null,"date":null,"category":null,"payment":null,"paidCash":false,"note":null}.
+Today is ${today()}.`;
+      const out=await sample.json(prompt,{images:[img],modelTier:"default"});
+      if(run!==detectRun)return;
+      apply(out||{});
+    }catch(e){
+      if(run!==detectRun)return;
+      if(e&&e.code==="not_granted"){detectMsg("");canRead=false;return}
+      detectMsg(e&&e.code==="rate_limited"?"Too many reads right now. Fill this one in by hand.":"Couldn't read this one automatically. Fill it in by hand.");
+    }
+  }
+
+  function apply(o){
+    const filled=[];
+    const total=typeof o.total==="number"?o.total:parseFloat(o.total);
+    if(!touched.amount&&isFinite(total)&&total>0){$("amount").value=total.toFixed(2);markAuto("amount",true);filled.push("amount")}
+    if(!touched.vendor&&o.vendor&&!$("vendor").value.trim()){
+      // match an existing vendor spelling if close
+      const known=receipts.map(r=>r.vendor).find(v=>v&&v.toLowerCase()===String(o.vendor).toLowerCase());
+      $("vendor").value=known||String(o.vendor).slice(0,80);markAuto("vendor",true);filled.push("vendor")}
+    if(!touched.date&&/^\d{4}-\d{2}-\d{2}$/.test(o.date||"")&&o.date<=today()){$("date").value=o.date;markAuto("date",true);filled.push("date")}
+    if(!touched.cat&&CATEGORIES.includes(o.category)){category=o.category;autoCat=true;drawChips();filled.push("category")}
+    const pay=o.paidCash?"Cash":o.payment;
+    if(!touched.pay&&pay&&[...$("pay").options].some(op=>op.value===pay)){$("pay").value=pay;markAuto("pay",true);filled.push("payment")}
+    if(!touched.note&&o.note&&!$("note").value.trim()){$("note").value=String(o.note).slice(0,120);markAuto("note",true);filled.push("note")}
+    if(filled.length)detectMsg("Filled in "+filled.join(", ")+" from the receipt. Check them, then save.","ok");
+    else detectMsg("Couldn't find receipt details in that image. Fill it in by hand.");
+  }
+  $("photoCam").addEventListener("change",()=>attach($("photoCam")));
+  $("photoFile").addEventListener("change",()=>attach($("photoFile")));
+  $("photoClear").onclick=()=>{setPhoto(null);detectRun++;detectMsg("")};
+  function shrink(file){return new Promise(res=>{
+    const img=new Image(),u=URL.createObjectURL(file);
+    img.onload=()=>{const m=1600,s=Math.min(1,m/Math.max(img.width,img.height));const c=document.createElement("canvas");
+      c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      URL.revokeObjectURL(u);c.toBlob(b=>res(b||file),"image/jpeg",0.82)};
+    img.onerror=()=>{URL.revokeObjectURL(u);res(file)}; img.src=u;})}
+
+  // Rendering
+  $("search").addEventListener("input",render); $("filterCat").addEventListener("change",render);
+  function render(){
+    const now=new Date(), ym=today().slice(0,7), y=String(now.getFullYear());
+    $("monthLabel").textContent=MONTHS[now.getMonth()]; $("yearLabel").textContent=y+" to date";
+    $("tMonth").textContent=money(receipts.filter(r=>r.date.startsWith(ym)).reduce((a,r)=>a+r.cents,0));
+    $("tYear").textContent=money(receipts.filter(r=>r.date.startsWith(y)).reduce((a,r)=>a+r.cents,0));
+    $("tCount").textContent=receipts.length;
+    $("exportBtn").hidden=!downloads||!receipts.length;
+    // vendor suggestions
+    const vs=[...new Set(receipts.map(r=>r.vendor).filter(Boolean))].sort();
+    $("vendorList").innerHTML=""; vs.forEach(v=>{const o=document.createElement("option");o.value=v;$("vendorList").appendChild(o)});
+
+    const q=$("search").value.trim().toLowerCase(), fc=$("filterCat").value;
+    const shown=receipts.filter(r=>(!fc||r.category===fc)&&(!q||(r.vendor+" "+r.note).toLowerCase().includes(q)));
+    const list=$("list"); list.innerHTML="";
+    if(!receipts.length){list.innerHTML='<div class="empty">Your receipts will show up here, newest first, grouped by month. Enter an amount above and tap <b>Save receipt</b> to add the first one.</div>';return}
+    if(!shown.length){list.innerHTML='<div class="empty">No receipts match that search.</div>';return}
+    const groups={}; shown.forEach(r=>{(groups[r.date.slice(0,7)]=groups[r.date.slice(0,7)]||[]).push(r)});
+    const wrap=document.createElement("div");wrap.style.cssText="display:flex;flex-direction:column;gap:16px";
+    Object.keys(groups).sort().reverse().forEach(k=>{
+      const rs=groups[k], [yy,mm]=k.split("-");
+      const sec=document.createElement("div");sec.className="month";
+      const h=document.createElement("div");h.className="month-head";
+      h.innerHTML='<span class="label"></span><span class="num" style="font-weight:600"></span>';
+      h.children[0].textContent=MONTHS[+mm-1]+" "+yy+" · "+rs.length; h.children[1].textContent=money(rs.reduce((a,r)=>a+r.cents,0));
+      const box=document.createElement("div");box.className="rows";
+      rs.forEach(r=>{
+        const b=document.createElement("button");b.type="button";b.className="row";
+        const d=new Date(r.date+"T12:00:00");
+        b.innerHTML='<div class="day"><b></b><span></span></div><div class="who"><div class="vendor"></div><div class="meta"><span class="tag"></span><span class="m"></span></div></div><div class="amt"></div>';
+        b.querySelector(".day b").textContent=d.getDate(); b.querySelector(".day span").textContent=d.toLocaleDateString("en-US",{weekday:"short"});
+        b.querySelector(".vendor").textContent=r.vendor||"(no vendor)";
+        b.querySelector(".tag").textContent=r.category;
+        b.querySelector(".m").textContent=[r.pay,r.note,r.photoId?(r.photoType==="pdf"?"📎 PDF":"📎 photo"):""].filter(Boolean).join(" · ");
+        b.querySelector(".amt").textContent=money(r.cents);
+        b.setAttribute("aria-label","Edit "+(r.vendor||"receipt")+" "+money(r.cents)+" on "+r.date);
+        b.onclick=()=>startEdit(r); box.appendChild(b);
+      });
+      sec.append(h,box); wrap.appendChild(sec);
+    });
+    list.appendChild(wrap);
+  }
+
+  // CSV export
+  $("exportBtn").onclick=async()=>{
+    const esc=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+    const rows=[["Date","Vendor","Category","Amount","Paid with","Note","Photo"]].concat(
+      receipts.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>[r.date,r.vendor,r.category,(r.cents/100).toFixed(2),r.pay,r.note,r.photoUrl?new URL(r.photoUrl,location.href).href:""]));
+    try{await downloads.save({filename:"receipts-"+today()+".csv",data:rows.map(r=>r.map(esc).join(",")).join("\n")})}
+    catch(e){if(e&&e.code!=="cancelled")toast("Export didn't go through")}
+  };
+
+  render();
+
+  // Connect capabilities
+  (async()=>{
+    if(!window.claude||!claude.use){$("status").textContent="Open this page in Claude to save receipts.";return}
+    claude.use("assets").then(a=>{assets=a;$("photoField").hidden=!a});
+    claude.use("downloads").then(d=>{downloads=d;render()});
+    claude.use("sample").then(async s=>{if(!s)return;const lim=await s.limits().catch(()=>null);sample=s;canRead=!!(lim&&lim.images)});
+    claude.use("user").then(async u=>{if(u){const w=await u.can("data.write");if(w===false){canWrite=false;$("saveBtn").disabled=true;$("status").textContent="View only"}}});
+    db=await claude.use("db");
+    if(!db){$("status").textContent="Sign in to Claude to save receipts.";return}
+    col=db.collection("receipts");
+    col.orderBy("date","desc").onSnapshot(snap=>{
+      receipts=snap.docs.map(d=>Object.assign({id:d.id},d.data()));
+      receipts.sort((a,b)=>b.date.localeCompare(a.date)||String(b.createdAt).localeCompare(String(a.createdAt)));
+      if(canWrite)$("status").textContent="Saved to your log · syncs across devices";
+      render();
+    },err=>{$("status").textContent="Lost connection to your log. Reload to reconnect."});
+  })();
+})();
+</script>
