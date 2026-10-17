@@ -4,6 +4,14 @@ Every past build is kept in `versions/`. To roll back, copy an older file over
 `index.html` (and `receipt-parser.js` if one is listed), upload, and bump `CACHE`
 in `sw.js` so phones pick it up. Receipts stored on your devices are not affected.
 
+## v2.0.2 — 2026-10-17 — iPhone save fix
+- Fixed "Couldn't save: InvalidStateError … database connection is closing" on iPhone. iOS Safari
+  can close the on-device database (often after the camera/photo picker); the app now reopens it
+  and retries automatically.
+- Images are stored as raw bytes instead of Blobs, which some iOS versions refuse to store.
+  Older saved images still load.
+- Files: `versions/receipt-log-v2.0.2.html`
+
 ## v2.0.1 — 2026-10-17 — iPhone fix
 - Receipt reader used a regex lookbehind, which iOS Safari before 16.4 can't parse; that stopped the
   whole app on older iPhones. Rewritten without it (same results).

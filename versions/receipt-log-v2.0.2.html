@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Receipt Log</title>
+<!--
+  RECEIPT LOG — standalone installable app
+  =================================================================
+  VERSION HISTORY (newest first). Full notes in CHANGELOG.md; every
+  past build is kept in the versions/ folder so you can roll back by
+  copying an older file over index.html. Your receipts live in the
+  browser's on-device storage and are NOT touched by swapping versions.
+
+  v2.0.2  2026-10-17  iPhone save fix: reopens the on-device database when
+                      iOS Safari closes it (happened after using the camera),
+                      and stores images as raw bytes for older iOS.
+  v2.0.1  2026-10-17  iPhone fix: receipt reader no longer uses a text
+                      pattern older iOS Safari can't run. Any startup
+                      error now shows on screen instead of a dead page.
+  v2.0.0  2026-10-16  Standalone app (left the Claude artifact):
+                      - Installable on phone and PC (PWA), works offline
+                      - Receipts + photos saved on this device (IndexedDB)
+                      - Take photo / choose image or PDF
+                      - Free on-device text reading (Tesseract OCR, bundled
+                        in vendor/ so it works offline) fills
+                        amount, date, vendor, category, cash/check
+                      - Backup + restore file, CSV export
+  v1.2.0  2026-10-16  (Claude artifact) Claude-powered auto-detect
+  v1.1.0  2026-10-16  (Claude artifact) Take photo / choose file, PDFs
+  v1.0.0  2026-10-16  (Claude artifact) First build
+  =================================================================
+-->
+<meta name="theme-color" content="#1f6f5c">
+<meta name="description" content="Quick receipt entry for business expenses. Works offline.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Receipts">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#eef1f2; --surface:#ffffff; --ink:#15201f; --muted:#5c6b6a; --line:#d5dcdc;
+  --accent:#1f6f5c; --accent-ink:#ffffff; --accent-soft:#dcece7; --danger:#b3372b; --danger-soft:#f6e1de;
+  --font-ui:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --r:10px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#101716; --surface:#18211f; --ink:#e6eeec; --muted:#93a3a0; --line:#2b3835;
+  --accent:#4cbf9f; --accent-ink:#06231b; --accent-soft:#1d3a32; --danger:#f0806f; --danger-soft:#3b211d; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(48px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:24px;font-weight:800;letter-spacing:-.01em;margin:0}
+.sub{color:var(--muted);font-size:13px}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.totals{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.totals div{background:var(--surface);padding:12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.totals .num{font-size:18px;font-weight:600}
+form.slip{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:14px}
+.slip-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.amount-row{display:flex;align-items:center;gap:6px;border-bottom:2px solid var(--ink);padding-bottom:4px}
+.amount-row span{font-family:var(--font-num);font-size:30px;color:var(--muted)}
+#amount{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font-family:var(--font-num);font-size:34px;font-weight:600;padding:2px 0;outline:none}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:440px){.grid2{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+input[type=text],input[type=date],select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 11px;min-height:44px}
+input:focus-visible,select:focus-visible,button:focus-visible,label.btn:focus-within,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:7px 12px;font:inherit;font-size:13.5px;cursor:pointer;min-height:36px}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.photo-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.thumb{width:56px;height:56px;border-radius:6px;border:1px solid var(--line);object-fit:cover;cursor:pointer;padding:0;background:var(--bg)}
+.pdf-badge{display:inline-flex;align-items:center;justify-content:center;background:var(--danger-soft);color:var(--danger);font-family:var(--font-num);font-weight:600;font-size:13px}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:10px 14px;min-height:44px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink);display:inline-flex;align-items:center;justify-content:center}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:16px}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.btn.small{min-height:36px;padding:6px 11px;font-size:13px}
+.btn:disabled{opacity:.55;cursor:default}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.actions .primary{flex:1}
+.err{color:var(--danger);font-size:13px}
+.auto{background:var(--accent-soft)!important;border-color:var(--accent)!important}
+.amount-row.auto{background:transparent!important}
+#amount.auto{color:var(--accent)}
+.detect{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.detect.ok{color:var(--accent);font-weight:600}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--accent);flex:none}
+@media (prefers-reduced-motion:no-preference){.spin{animation:sp .8s linear infinite}.row{transition:background .12s}}
+@keyframes sp{to{transform:rotate(360deg)}}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.toolbar input{flex:1 1 180px}
+.toolbar select{flex:0 1 170px}
+.month{display:flex;flex-direction:column;gap:6px}
+.month-head{display:flex;justify-content:space-between;align-items:baseline;padding:0 2px}
+.rows{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.row{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:11px 12px;border:0;border-top:1px solid var(--line);cursor:pointer;background:transparent;width:100%;text-align:left;font:inherit;color:inherit}
+.row:first-child{border-top:0}
+.row:hover{background:var(--accent-soft)}
+.day{font-family:var(--font-num);font-size:12px;color:var(--muted);line-height:1.2;text-align:center}
+.day b{display:block;font-size:17px;color:var(--ink);font-weight:600}
+.who{min-width:0}
+.vendor{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amt{font-family:var(--font-num);font-weight:600;font-size:15px}
+.tag{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--ink);font-size:11.5px;margin-right:4px}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:22px;text-align:center;color:var(--muted)}
+.confirm{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--danger-soft);border-radius:8px;padding:10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+details.data{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+details.data summary{cursor:pointer;font-weight:600}
+details.data .inner{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+footer{color:var(--muted);font-size:12px;text-align:center}
+.viewer{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:30;display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))}
+.viewer img,.viewer iframe{flex:1;min-height:0;width:100%;object-fit:contain;border:0;background:#fff;border-radius:6px}
+.viewer .btn{align-self:flex-end;margin-bottom:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Receipt Log</h1>
+      <div class="sub" id="status">Saved on this device</div>
+    </div>
+    <button class="btn small" id="installBtn" type="button" hidden>Install app</button>
+  </header>
+
+  <section class="totals" aria-label="Totals">
+    <div><span class="label" id="monthLabel">This month</span><span class="num" id="tMonth">$0.00</span></div>
+    <div><span class="label" id="yearLabel">Year to date</span><span class="num" id="tYear">$0.00</span></div>
+    <div><span class="label">Receipts</span><span class="num" id="tCount">0</span></div>
+  </section>
+
+  <form class="slip" id="slip" autocomplete="off" novalidate>
+    <div class="slip-head"><strong id="formTitle">New receipt</strong><button class="btn small ghost" type="button" id="cancelEdit" hidden>Cancel edit</button></div>
+
+    <div class="field">
+      <span class="label">Receipt photo or PDF <span style="text-transform:none;letter-spacing:0;font-weight:400">· fills the form for you</span></span>
+      <div class="photo-row">
+        <button type="button" class="thumb" id="thumbBtn" hidden aria-label="View attached receipt"></button>
+        <label class="btn small" for="photoCam">Take photo</label>
+        <input id="photoCam" type="file" accept="image/*" capture="environment" hidden>
+        <label class="btn small" for="photoFile">Choose file</label>
+        <input id="photoFile" type="file" accept="image/*,application/pdf" hidden>
+        <button class="btn small ghost" type="button" id="photoClear" hidden>Remove</button>
+      </div>
+      <div class="detect" id="detect" hidden></div>
+    </div>
+
+    <div class="field">
+      <label class="label" for="amount">Amount</label>
+      <div class="amount-row"><span>$</span><input id="amount" type="text" inputmode="decimal" placeholder="0.00"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label class="label" for="vendor">Vendor</label><input id="vendor" type="text" list="vendorList" placeholder="Where you bought it" autocapitalize="words"><datalist id="vendorList"></datalist></div>
+      <div class="field"><label class="label" for="date">Date</label><input id="date" type="date"></div>
+    </div>
+    <div class="field">
+      <span class="label" id="catLabel">Category</span>
+      <div class="chips" id="cats" role="group" aria-labelledby="catLabel"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label class="label" for="pay">Paid with</label>
+        <select id="pay"><option>Business card</option><option>Personal card</option><option>Cash</option><option>Check</option><option>Bank transfer</option><option>PayPal / Venmo</option></select></div>
+      <div class="field"><label class="label" for="note">Note (optional)</label><input id="note" type="text" placeholder="What it was for"></div>
+    </div>
+    <div class="err" id="formErr" role="alert"></div>
+    <div class="actions">
+      <button class="btn primary" type="submit" id="saveBtn">Save receipt</button>
+      <button class="btn danger" type="button" id="deleteBtn" hidden>Delete</button>
+    </div>
+    <div class="confirm" id="confirmDel" hidden>
+      <span>Delete this receipt for good?</span>
+      <button class="btn small danger" type="button" id="confirmYes">Delete</button>
+      <button class="btn small" type="button" id="confirmNo">Keep it</button>
+    </div>
+  </form>
+
+  <section style="display:flex;flex-direction:column;gap:12px" aria-label="Receipts">
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Search vendor or note" aria-label="Search receipts">
+      <select id="filterCat" aria-label="Filter by category"><option value="">All categories</option></select>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <details class="data">
+    <summary>Backup &amp; export</summary>
+    <div class="inner">
+      <div class="sub">Receipts are stored only on this device. Make a backup now and then, and use it to move receipts to another phone or computer.</div>
+      <div class="actions">
+        <button class="btn small" type="button" id="csvBtn">Export CSV</button>
+        <button class="btn small" type="button" id="backupBtn">Download backup</button>
+        <label class="btn small" for="restoreFile">Restore from backup</label>
+        <input id="restoreFile" type="file" accept=".json,application/json" hidden>
+      </div>
+      <div class="sub" id="dataMsg"></div>
+    </div>
+  </details>
+
+  <footer>Receipt Log <span id="ver">v2.0.2</span> · tap a receipt to edit it</footer>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="viewer" id="viewer" hidden><button class="btn small" type="button" id="viewerClose">Close</button><div id="viewerBody" style="flex:1;min-height:0;display:flex"></div></div>
+
+<script>
+// v2.0.1: show startup errors on screen (helps diagnose phone-specific problems)
+window.addEventListener("error",function(e){var s=document.getElementById("status");if(s){s.style.color="#b3372b";s.textContent="Error: "+(e.message||"script failed")+(e.filename?" ("+e.filename.split("/").pop()+":"+e.lineno+")":"")}});
+</script>
+<script src="receipt-parser.js"></script>
+<script>
+(function(){
+"use strict";
+const APP_VERSION="2.0.2";
+const CATEGORIES=ReceiptParser.CATEGORIES;
+const $=id=>document.getElementById(id);
+const money=c=>(c<0?"-":"")+"$"+(Math.abs(c)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+
+/* ---------- On-device storage (IndexedDB) ---------- */
+let idb=null, idbOpening=null;
+function openDB(){return new Promise((ok,bad)=>{const r=indexedDB.open("receiptlog",1);
+  r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore("receipts",{keyPath:"id"});d.createObjectStore("files",{keyPath:"id"})};
+  r.onsuccess=()=>{const d=r.result;
+    // iOS Safari can close the connection behind our back (e.g. after the camera opens): forget it so the next call reopens
+    d.onclose=()=>{if(idb===d)idb=null};d.onversionchange=()=>{d.close();if(idb===d)idb=null};ok(d)};
+  r.onerror=()=>bad(r.error);r.onblocked=()=>bad(new Error("database blocked"))})}
+async function getDB(){if(idb)return idb;if(!idbOpening)idbOpening=openDB().then(d=>{idb=d;return d}).finally(()=>{idbOpening=null});return idbOpening}
+function run(d,store,mode,fn){return new Promise((ok,bad)=>{const t=d.transaction(store,mode);const s=t.objectStore(store);const res=fn(s);
+  t.oncomplete=()=>ok(res&&res.result!==undefined?res.result:undefined);t.onerror=()=>bad(t.error);t.onabort=()=>bad(t.error||new Error("aborted"))})}
+// v2.0.2: reopen and retry once when the browser has closed the database
+async function tx(store,mode,fn){
+  try{return await run(await getDB(),store,mode,fn)}
+  catch(e){
+    const closed=e&&(e.name==="InvalidStateError"||/closing|closed|connection/i.test(String(e.message||e)));
+    if(!closed)throw e;
+    try{idb&&idb.close()}catch(_){} idb=null;
+    return run(await getDB(),store,mode,fn);
+  }
+}
+const getAll=store=>tx(store,"readonly",s=>s.getAll());
+const getOne=(store,id)=>tx(store,"readonly",s=>s.get(id));
+const put=(store,v)=>tx(store,"readwrite",s=>s.put(v));
+const del=(store,id)=>tx(store,"readwrite",s=>s.delete(id));
+// Images are stored as raw bytes (some iOS versions refuse to store Blobs)
+async function putFile(id,blob,type){await put("files",{id,type,mime:blob.type||(type==="pdf"?"application/pdf":"image/jpeg"),data:await blob.arrayBuffer()})}
+function fileBlob(f){return f.blob||new Blob([f.data],{type:f.mime||""})}
+
+let receipts=[], editingId=null, category="Materials";
+let attached=null;          // {id, blob, type:"image"|"pdf", isNew}
+let removedFileId=null;
+let touched={}, autoCat=false, detectRun=0;
+
+function remember(k,v){try{localStorage.setItem("rl_"+k,v)}catch(e){}}
+function recall(k){try{return localStorage.getItem("rl_"+k)}catch(e){return null}}
+category=recall("cat")||category; if(recall("pay")) $("pay").value=recall("pay");
+
+/* ---------- Form ---------- */
+function drawChips(){
+  $("cats").innerHTML="";
+  CATEGORIES.forEach(c=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=c;
+    b.setAttribute("aria-pressed",String(c===category));if(c===category&&autoCat)b.classList.add("auto");
+    b.onclick=()=>{category=c;touched.cat=true;autoCat=false;drawChips()};$("cats").appendChild(b)});
+}
+CATEGORIES.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;$("filterCat").appendChild(o)});
+drawChips(); $("date").value=today();
+
+const AUTO={amount:"amount",vendor:"vendor",date:"date",pay:"pay",note:"note"};
+Object.entries(AUTO).forEach(([k,id])=>$(id).addEventListener(id==="pay"||id==="date"?"change":"input",()=>{touched[k]=true;markAuto(k,false)}));
+function markAuto(k,on){const el=k==="amount"?$("amount").parentElement:$(AUTO[k]);el.classList.toggle("auto",on);if(k==="amount")$("amount").classList.toggle("auto",on)}
+function clearAuto(){Object.keys(AUTO).forEach(k=>markAuto(k,false));autoCat=false}
+function detectMsg(html,cls){const d=$("detect");d.hidden=!html;d.className="detect"+(cls?" "+cls:"");d.innerHTML=html||""}
+
+function parseCents(s){const t=String(s).replace(/[$,\s]/g,"");if(!/^\d+(\.\d{0,2})?$/.test(t))return null;return Math.round(parseFloat(t)*100)}
+function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2400)}
+
+function showAttached(){
+  const b=$("thumbBtn"); b.hidden=!attached; $("photoClear").hidden=!attached; b.innerHTML=""; b.className="thumb";
+  $("photoCam").value=""; $("photoFile").value="";
+  if(!attached)return;
+  if(attached.type==="pdf"){b.classList.add("pdf-badge");b.textContent="PDF"}
+  else{const i=document.createElement("img");i.className="thumb";i.style.border="0";i.alt="";i.src=objUrl(attached.blob);b.appendChild(i)}
+}
+const urls=new Map();
+function objUrl(blob){if(!urls.has(blob))urls.set(blob,URL.createObjectURL(blob));return urls.get(blob)}
+
+function resetForm(keep){
+  editingId=null; $("amount").value=""; $("vendor").value=""; $("note").value="";
+  if(!keep) $("date").value=today();
+  attached=null; removedFileId=null; showAttached(); $("formErr").textContent="";
+  touched={}; detectRun++; clearAuto(); detectMsg(""); drawChips();
+  $("formTitle").textContent="New receipt"; $("saveBtn").textContent="Save receipt";
+  $("cancelEdit").hidden=true; $("deleteBtn").hidden=true; $("confirmDel").hidden=true;
+}
+async function startEdit(r){
+  editingId=r.id; $("amount").value=(r.cents/100).toFixed(2); $("vendor").value=r.vendor||""; $("date").value=r.date;
+  touched={amount:true,vendor:!!r.vendor,date:true,cat:true,pay:true,note:!!r.note}; detectRun++; clearAuto(); detectMsg("");
+  category=r.category||"Other"; drawChips(); $("pay").value=r.pay||"Business card"; $("note").value=r.note||"";
+  attached=null; removedFileId=null;
+  if(r.fileId){const f=await getOne("files",r.fileId).catch(()=>null);if(f)attached={id:f.id,blob:fileBlob(f),type:f.type,isNew:false}}
+  showAttached();
+  $("formTitle").textContent="Edit receipt"; $("saveBtn").textContent="Save changes";
+  $("cancelEdit").hidden=false; $("deleteBtn").hidden=false; $("confirmDel").hidden=true; $("formErr").textContent="";
+  $("slip").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
+}
+
+$("cancelEdit").onclick=()=>resetForm();
+$("deleteBtn").onclick=()=>{$("confirmDel").hidden=false};
+$("confirmNo").onclick=()=>{$("confirmDel").hidden=true};
+$("confirmYes").onclick=async()=>{
+  if(!editingId)return; const r=receipts.find(x=>x.id===editingId);
+  try{await del("receipts",editingId);if(r&&r.fileId)await del("files",r.fileId);toast("Receipt deleted");resetForm();await load()}
+  catch(e){$("formErr").textContent="Couldn't delete: "+e}
+};
+
+$("slip").addEventListener("submit",async ev=>{
+  ev.preventDefault();
+  const cents=parseCents($("amount").value);
+  if(cents===null||cents===0){$("formErr").textContent="Enter the receipt total, like 42.50.";$("amount").focus();return}
+  if(!$("date").value){$("formErr").textContent="Pick the date on the receipt.";return}
+  const old=editingId?receipts.find(r=>r.id===editingId):null;
+  const now=new Date().toISOString();
+  const rec={id:editingId||uid(),cents,vendor:$("vendor").value.trim(),date:$("date").value,category,pay:$("pay").value,note:$("note").value.trim(),
+    fileId:attached?attached.id:null,fileType:attached?attached.type:null,createdAt:old?old.createdAt:now,updatedAt:now};
+  $("saveBtn").disabled=true;
+  try{
+    if(attached&&attached.isNew)await putFile(attached.id,attached.blob,attached.type);
+    await put("receipts",rec);
+    if(removedFileId&&removedFileId!==rec.fileId)await del("files",removedFileId);
+    remember("cat",category); remember("pay",rec.pay);
+    toast(editingId?"Changes saved":"Saved "+money(cents)+(rec.vendor?" · "+rec.vendor:""));
+    resetForm(!editingId); await load();
+  }catch(e){
+    $("formErr").textContent=/quota/i.test(String(e))?"This device is out of storage space. Download a backup, then delete old receipts.":"Couldn't save: "+e;
+  }finally{$("saveBtn").disabled=false}
+});
+
+/* ---------- Attachments ---------- */
+function shrink(file,max){return new Promise(res=>{
+  const img=new Image(),u=URL.createObjectURL(file);
+  img.onload=()=>{const s=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement("canvas");
+    c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    URL.revokeObjectURL(u);c.toBlob(b=>res(b||file),"image/jpeg",0.82)};
+  img.onerror=()=>{URL.revokeObjectURL(u);res(file)};img.src=u})}
+
+async function attach(input){
+  const f=input.files[0]; if(!f)return;
+  const pdf=f.type==="application/pdf"||/\.pdf$/i.test(f.name);
+  if(!pdf&&!/^image\//.test(f.type)){detectMsg("Pick an image or a PDF.");input.value="";return}
+  if(attached&&!attached.isNew)removedFileId=attached.id;
+  const blob=pdf?f:await shrink(f,1600);
+  attached={id:uid(),blob,type:pdf?"pdf":"image",isNew:true};
+  showAttached();
+  readReceipt(pdf?f:blob,pdf);
+}
+$("photoCam").addEventListener("change",()=>attach($("photoCam")));
+$("photoFile").addEventListener("change",()=>attach($("photoFile")));
+$("photoClear").onclick=()=>{if(attached&&!attached.isNew)removedFileId=attached.id;attached=null;showAttached();detectRun++;detectMsg("")};
+$("thumbBtn").onclick=()=>{if(attached)openViewer(attached.blob,attached.type)};
+
+function openViewer(blob,type){
+  const body=$("viewerBody");body.innerHTML="";
+  if(type==="pdf"){const f=document.createElement("iframe");f.src=objUrl(blob);f.title="Receipt PDF";body.appendChild(f)}
+  else{const i=document.createElement("img");i.src=objUrl(blob);i.alt="Receipt";body.appendChild(i)}
+  $("viewer").hidden=false;
+}
+$("viewerClose").onclick=()=>{$("viewer").hidden=true;$("viewerBody").innerHTML=""};
+
+/* ---------- Free on-device reading (OCR) ---------- */
+// Bundled with the app (vendor/) so reading works offline and never depends on a CDN
+const abs=p=>new URL(p,location.href).href;
+const TESS=abs("vendor/tesseract/tesseract.min.js");
+const PDFJS=abs("vendor/pdfjs/");
+const scripts={};
+function loadScript(src){return scripts[src]||(scripts[src]=new Promise((ok,bad)=>{const s=document.createElement("script");s.src=src;s.onload=ok;s.onerror=()=>{delete scripts[src];bad(new Error("load"))};document.head.appendChild(s)}))}
+let workerP=null;
+function getWorker(onProg){
+  if(!workerP)workerP=loadScript(TESS).then(()=>Tesseract.createWorker("eng",1,{
+    workerPath:abs("vendor/tesseract/worker.min.js"),corePath:abs("vendor/tesseract/core"),
+    langPath:abs("vendor/tesseract/lang"),workerBlobURL:false,
+    logger:m=>workerP._log&&workerP._log(m)})).catch(e=>{workerP=null;throw e});
+  workerP._log=onProg; return workerP;
+}
+async function pdfToImage(file){
+  await loadScript(PDFJS+"pdf.min.js");
+  pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+"pdf.worker.min.js";
+  const doc=await pdfjsLib.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
+  const page=await doc.getPage(1);const v1=page.getViewport({scale:1});
+  const vp=page.getViewport({scale:Math.min(3,2000/Math.max(v1.width,v1.height))});
+  const c=document.createElement("canvas");c.width=Math.round(vp.width);c.height=Math.round(vp.height);
+  const ctx=c.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,c.width,c.height);
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  // text-based PDFs: use embedded text directly (more accurate than OCR)
+  const tc=await page.getTextContent().catch(()=>null);
+  let text="";
+  if(tc&&tc.items.length){let lastY=null;tc.items.forEach(it=>{const y=Math.round(it.transform[5]);text+=(lastY!==null&&Math.abs(y-lastY)>3?"\n":" ")+it.str;lastY=y})}
+  return {canvas:c,text:text.trim()};
+}
+// grayscale + contrast stretch, ~2000px — helps OCR on phone photos
+function prep(source){
+  const w0=source.width||source.naturalWidth,h0=source.height||source.naturalHeight;
+  const s=Math.min(1.6,2000/Math.max(w0,h0));const c=document.createElement("canvas");
+  c.width=Math.round(w0*s);c.height=Math.round(h0*s);const x=c.getContext("2d");x.drawImage(source,0,0,c.width,c.height);
+  const d=x.getImageData(0,0,c.width,c.height),p=d.data;let lo=255,hi=0;const g=new Uint8ClampedArray(p.length/4);
+  for(let i=0,j=0;i<p.length;i+=4,j++){const v=(p[i]*299+p[i+1]*587+p[i+2]*114)/1000;g[j]=v;}
+  const hist=new Array(256).fill(0);g.forEach(v=>hist[v|0]++);let acc=0;const n=g.length;
+  for(let v=0;v<256;v++){acc+=hist[v];if(acc>n*.02){lo=v;break}}acc=0;
+  for(let v=255;v>=0;v--){acc+=hist[v];if(acc>n*.02){hi=v;break}}
+  const k=255/Math.max(1,hi-lo);
+  for(let i=0,j=0;i<p.length;i+=4,j++){const v=Math.max(0,Math.min(255,(g[j]-lo)*k));p[i]=p[i+1]=p[i+2]=v}
+  x.putImageData(d,0,0);return c;
+}
+function blobToImage(b){return new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=bad;i.src=objUrl(b)})}
+
+async function readReceipt(blob,pdf){
+  const run=++detectRun;
+  const say=t=>{if(run===detectRun)detectMsg('<span class="spin" aria-hidden="true"></span><span>'+t+'</span>')};
+  say("Reading receipt…");
+  try{
+    let text="",canvas;
+    if(pdf){const r=await pdfToImage(blob);canvas=r.canvas;text=r.text}
+    else canvas=await blobToImage(blob);
+    if(run!==detectRun)return;
+    if(text.replace(/\s/g,"").length<20){
+      const w=await getWorker(m=>{
+        if(m.status==="recognizing text")say("Reading receipt… "+Math.round(m.progress*100)+"%");
+        else if(/load/i.test(m.status))say("Getting the text reader ready (first time only)…");
+      });
+      if(run!==detectRun)return;
+      const res=await w.recognize(prep(canvas));
+      text=res.data.text||"";
+    }
+    if(run!==detectRun)return;
+    apply(ReceiptParser.parseReceipt(text,{today:today(),history:receipts}));
+  }catch(e){
+    if(run!==detectRun)return;
+    detectMsg(navigator.onLine?"Couldn't read this one. Fill it in by hand.":"The text reader needs internet the first time. Fill this one in by hand.");
+  }
+}
+function apply(o){
+  const filled=[];
+  if(!touched.amount&&o.cents){$("amount").value=(o.cents/100).toFixed(2);markAuto("amount",true);filled.push("amount")}
+  if(!touched.vendor&&o.vendor&&!$("vendor").value.trim()){$("vendor").value=o.vendor;markAuto("vendor",true);filled.push("vendor")}
+  if(!touched.date&&o.date){$("date").value=o.date;markAuto("date",true);filled.push("date")}
+  if(!touched.cat&&o.category){category=o.category;autoCat=true;drawChips();filled.push("category")}
+  if(!touched.pay&&o.pay){$("pay").value=o.pay;markAuto("pay",true);filled.push("payment")}
+  if(filled.length)detectMsg("Filled in "+filled.join(", ")+". Check them, then save.","ok");
+  else detectMsg("Couldn't pick out details from that image. Fill it in by hand.");
+}
+
+/* ---------- List ---------- */
+$("search").addEventListener("input",render); $("filterCat").addEventListener("change",render);
+async function load(){
+  receipts=(await getAll("receipts")).sort((a,b)=>b.date.localeCompare(a.date)||String(b.createdAt).localeCompare(String(a.createdAt)));
+  render();
+}
+function render(){
+  const now=new Date(),ym=today().slice(0,7),y=String(now.getFullYear());
+  $("monthLabel").textContent=MONTHS[now.getMonth()]; $("yearLabel").textContent=y+" to date";
+  $("tMonth").textContent=money(receipts.filter(r=>r.date.startsWith(ym)).reduce((a,r)=>a+r.cents,0));
+  $("tYear").textContent=money(receipts.filter(r=>r.date.startsWith(y)).reduce((a,r)=>a+r.cents,0));
+  $("tCount").textContent=receipts.length;
+  const vs=[...new Set(receipts.map(r=>r.vendor).filter(Boolean))].sort();
+  $("vendorList").innerHTML=""; vs.forEach(v=>{const o=document.createElement("option");o.value=v;$("vendorList").appendChild(o)});
+  const q=$("search").value.trim().toLowerCase(),fc=$("filterCat").value;
+  const shown=receipts.filter(r=>(!fc||r.category===fc)&&(!q||(r.vendor+" "+r.note).toLowerCase().includes(q)));
+  const list=$("list");list.innerHTML="";
+  if(!receipts.length){list.innerHTML='<div class="empty">Your receipts will show up here, newest first, grouped by month. Snap a photo above or type an amount, then tap <b>Save receipt</b>.</div>';return}
+  if(!shown.length){list.innerHTML='<div class="empty">No receipts match that search.</div>';return}
+  const groups={};shown.forEach(r=>{(groups[r.date.slice(0,7)]=groups[r.date.slice(0,7)]||[]).push(r)});
+  const wrap=document.createElement("div");wrap.style.cssText="display:flex;flex-direction:column;gap:16px";
+  Object.keys(groups).sort().reverse().forEach(k=>{
+    const rs=groups[k],[yy,mm]=k.split("-");
+    const sec=document.createElement("div");sec.className="month";
+    const h=document.createElement("div");h.className="month-head";
+    h.innerHTML='<span class="label"></span><span class="num" style="font-weight:600"></span>';
+    h.children[0].textContent=MONTHS[+mm-1]+" "+yy+" · "+rs.length;h.children[1].textContent=money(rs.reduce((a,r)=>a+r.cents,0));
+    const box=document.createElement("div");box.className="rows";
+    rs.forEach(r=>{
+      const b=document.createElement("button");b.type="button";b.className="row";const d=new Date(r.date+"T12:00:00");
+      b.innerHTML='<div class="day"><b></b><span></span></div><div class="who"><div class="vendor"></div><div class="meta"><span class="tag"></span><span class="m"></span></div></div><div class="amt"></div>';
+      b.querySelector(".day b").textContent=d.getDate();b.querySelector(".day span").textContent=d.toLocaleDateString("en-US",{weekday:"short"});
+      b.querySelector(".vendor").textContent=r.vendor||"(no vendor)";b.querySelector(".tag").textContent=r.category;
+      b.querySelector(".m").textContent=[r.pay,r.note,r.fileId?(r.fileType==="pdf"?"📎 PDF":"📎 photo"):""].filter(Boolean).join(" · ");
+      b.querySelector(".amt").textContent=money(r.cents);
+      b.onclick=()=>startEdit(r);box.appendChild(b);
+    });
+    sec.append(h,box);wrap.appendChild(sec);
+  });
+  list.appendChild(wrap);
+}
+
+/* ---------- Export / backup / restore ---------- */
+function saveFile(name,blob){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
+$("csvBtn").onclick=()=>{
+  if(!receipts.length){$("dataMsg").textContent="No receipts to export yet.";return}
+  const esc=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=[["Date","Vendor","Category","Amount","Paid with","Note","Has image"]].concat(
+    receipts.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>[r.date,r.vendor,r.category,(r.cents/100).toFixed(2),r.pay,r.note,r.fileId?"yes":""]));
+  saveFile("receipts-"+today()+".csv",new Blob([rows.map(r=>r.map(esc).join(",")).join("\r\n")],{type:"text/csv"}));
+  $("dataMsg").textContent="CSV downloaded.";
+};
+const b2d=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});
+$("backupBtn").onclick=async()=>{
+  $("dataMsg").textContent="Building backup…";
+  const files=await getAll("files");
+  const out={app:"receipt-log",version:APP_VERSION,exportedAt:new Date().toISOString(),receipts,
+    files:await Promise.all(files.map(async f=>({id:f.id,type:f.type,data:await b2d(fileBlob(f))})))};
+  saveFile("receipt-log-backup-"+today()+".json",new Blob([JSON.stringify(out)],{type:"application/json"}));
+  remember("lastBackup",today());
+  $("dataMsg").textContent="Backup downloaded ("+receipts.length+" receipts, "+files.length+" images).";
+};
+$("restoreFile").addEventListener("change",async()=>{
+  const f=$("restoreFile").files[0];$("restoreFile").value="";if(!f)return;
+  try{
+    const data=JSON.parse(await f.text());
+    if(data.app!=="receipt-log"||!Array.isArray(data.receipts))throw new Error("not a Receipt Log backup");
+    let added=0,updated=0;
+    for(const fl of data.files||[]){const blob=await (await fetch(fl.data)).blob();await putFile(fl.id,blob,fl.type)}
+    for(const r of data.receipts){const ex=receipts.find(x=>x.id===r.id);
+      if(!ex){await put("receipts",r);added++}else if(String(r.updatedAt)>String(ex.updatedAt)){await put("receipts",r);updated++}}
+    await load();
+    $("dataMsg").textContent="Restored: "+added+" new, "+updated+" updated. Receipts already here were kept.";
+  }catch(e){$("dataMsg").textContent="That file couldn't be restored: "+e.message+"."}
+});
+
+/* ---------- Install + offline ---------- */
+let deferred=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();deferred=e;$("installBtn").hidden=false});
+$("installBtn").onclick=async()=>{if(!deferred)return;deferred.prompt();await deferred.userChoice;deferred=null;$("installBtn").hidden=true};
+window.addEventListener("appinstalled",()=>{$("installBtn").hidden=true});
+if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+
+(async()=>{
+  try{await getDB()}catch(e){$("status").textContent="This browser blocked on-device storage. Turn off private browsing and reload.";return}
+  if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+  await load();
+})();
+})();
+</script>
+</body>
+</html>
