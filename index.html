@@ -12,6 +12,9 @@
   copying an older file over index.html. Your receipts live in the
   browser's on-device storage and are NOT touched by swapping versions.
 
+  v2.2.1  2026-10-17  PDF report uses the signal symbol (brand/symbol.svg)
+                      instead of the name logo, and the footer drops the
+                      name, so reports suit anyone using the app.
   v2.2.0  2026-10-17  Exports: receipt numbers (R-0001) on every receipt;
                       Export panel with date range (presets + custom) and
                       category / payment / has-image filters; PDF report
@@ -260,7 +263,7 @@ footer .brand img{display:block;height:20px;width:auto}
       <source srcset="brand/logo-horizontal-white.svg" media="(prefers-color-scheme: dark)">
       <img src="brand/logo-horizontal.svg" alt="Austin Bergquist" width="202" height="20">
     </picture>
-    <div>Receipt Log <span id="ver">v2.2.0</span> · tap a receipt to edit it</div>
+    <div>Receipt Log <span id="ver">v2.2.1</span> · tap a receipt to edit it</div>
   </footer>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -274,7 +277,7 @@ window.addEventListener("error",function(e){var s=document.getElementById("statu
 <script>
 (function(){
 "use strict";
-const APP_VERSION="2.2.0";
+const APP_VERSION="2.2.1";
 const CATEGORIES=ReceiptParser.CATEGORIES;
 const $=id=>document.getElementById(id);
 const money=c=>(c<0?"-":"")+"$"+(Math.abs(c)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -666,9 +669,10 @@ async function toJpeg(blob,type){
     const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height)}
   return {data:c.toDataURL("image/jpeg",0.82),w:c.width,h:c.height};
 }
-async function logoPng(){
-  try{const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=bad;i.src=abs("brand/logo-horizontal.svg")});
-    const c=document.createElement("canvas");c.width=1012;c.height=100;c.getContext("2d").drawImage(img,0,0,1012,100);return c.toDataURL("image/png")}catch(e){return null}
+// v2.2.1: reports carry the symbol only (no personal name), so they suit anyone using the app
+async function symbolPng(){
+  try{const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=bad;i.src=abs("brand/symbol.svg")});
+    const c=document.createElement("canvas");c.width=192;c.height=192;c.getContext("2d").drawImage(img,0,0,192,192);return c.toDataURL("image/png")}catch(e){return null}
 }
 $("exPdf").onclick=async()=>{
   const sel=exSelected();if(!sel.length)return;
@@ -681,9 +685,9 @@ $("exPdf").onclick=async()=>{
     const col=c=>doc.setTextColor(c[0],c[1],c[2]);
     const rng=exRange(),tot=sel.reduce((a,r)=>a+r.cents,0),withImg=sel.filter(r=>r.fileId);
     // header
-    const logo=await logoPng();
-    if(logo)doc.addImage(logo,"PNG",M,M,182,18);
-    doc.setFont("helvetica","bold");doc.setFontSize(20);col(INK);doc.text("Receipt report",W-M,M+15,{align:"right"});
+    const sym=await symbolPng();
+    if(sym)doc.addImage(sym,"PNG",M,M-4,28,28);
+    doc.setFont("helvetica","bold");doc.setFontSize(20);col(INK);doc.text("Receipt report",M+(sym?38:0),M+17);
     let y=M+52;
     doc.setFont("helvetica","normal");doc.setFontSize(10);col(MUT);
     [["Period",rng.label],["Filters",exFilterText().join(" · ")],["Generated",fmtDate(today())]].forEach(([k,v])=>{
@@ -745,7 +749,7 @@ $("exPdf").onclick=async()=>{
       doc.textWithLink("p. "+ref.target,X.img,ref.y,{pageNumber:ref.target})});
     const N=doc.getNumberOfPages();
     for(let i=1;i<=N;i++){doc.setPage(i);doc.setFont("helvetica","normal");doc.setFontSize(8);col(MUT);
-      doc.text("Austin Bergquist · Receipt Log v"+APP_VERSION+" · "+rng.label,M,H-24);doc.text("Page "+i+" of "+N,W-M,H-24,{align:"right"})}
+      doc.text("Receipt Log v"+APP_VERSION+" · "+rng.label,M,H-24);doc.text("Page "+i+" of "+N,W-M,H-24,{align:"right"})}
     const res=await saveOut("receipt-report_"+rng.slug+".pdf",doc.output("blob"));
     exBusy(false,res==="cancelled"?"":"PDF ready: "+sel.length+" receipts, "+refs.length+" image pages.");
   }catch(e){exBusy(false,"Couldn't build the PDF: "+(e.message||e))}

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Signal symbol">
+<rect width="64" height="64" rx="14" fill="#1f6f5c"/>
+<path d="M9 41 H17 V23 H27 V41 H37 V23 H47 V41 H55" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter"/>
+</svg>

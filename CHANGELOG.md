@@ -4,6 +4,12 @@ Every past build is kept in `versions/`. To roll back, copy an older file over
 `index.html` (and `receipt-parser.js` if one is listed), upload, and bump `CACHE`
 in `sw.js` so phones pick it up. Receipts stored on your devices are not affected.
 
+## v2.2.1 — 2026-10-17 — Name-free reports
+- PDF report header uses the signal symbol (`brand/symbol.svg`: white pulse on a green tile)
+  instead of the "Austin Bergquist" logo; the page footer reads "Receipt Log vX · period".
+- Added `brand/symbol-mono.svg` (one-color outline version).
+- Files: `versions/receipt-log-v2.2.1.html`
+
 ## v2.2.0 — 2026-10-17 — Exports
 - Every receipt gets a number (R-0001, R-0002…), shown in the list and the edit screen. Existing
   receipts are numbered automatically in date order.
