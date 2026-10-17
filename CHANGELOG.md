@@ -4,6 +4,13 @@ Every past build is kept in `versions/`. To roll back, copy an older file over
 `index.html` (and `receipt-parser.js` if one is listed), upload, and bump `CACHE`
 in `sw.js` so phones pick it up. Receipts stored on your devices are not affected.
 
+## v2.1.0 — 2026-10-17 — Branding
+- Austin Bergquist logo (direction D, "signal wordmark") in the footer; switches to the white
+  version in dark mode.
+- New home-screen / install icons: "AB" over the green pulse.
+- Logo files (outlined vector, no font needed) in `brand/`.
+- Files: `versions/receipt-log-v2.1.0.html`
+
 ## v2.0.2 — 2026-10-17 — iPhone save fix
 - Fixed "Couldn't save: InvalidStateError … database connection is closing" on iPhone. iOS Safari
   can close the on-device database (often after the camera/photo picker); the app now reopens it

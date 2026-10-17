@@ -12,6 +12,8 @@
   copying an older file over index.html. Your receipts live in the
   browser's on-device storage and are NOT touched by swapping versions.
 
+  v2.1.0  2026-10-17  Branding: Austin Bergquist logo (signal wordmark) in
+                      the footer, new AB home-screen icons. Logo files in brand/.
   v2.0.2  2026-10-17  iPhone save fix: reopens the on-device database when
                       iOS Safari closes it (happened after using the camera),
                       and stores images as raw bytes for older iOS.
@@ -123,7 +125,8 @@ input:focus-visible,select:focus-visible,button:focus-visible,label.btn:focus-wi
 details.data{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 details.data summary{cursor:pointer;font-weight:600}
 details.data .inner{display:flex;flex-direction:column;gap:10px;margin-top:12px}
-footer{color:var(--muted);font-size:12px;text-align:center}
+footer{color:var(--muted);font-size:12px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
+footer .brand img{display:block;height:20px;width:auto}
 .viewer{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:30;display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))}
 .viewer img,.viewer iframe{flex:1;min-height:0;width:100%;object-fit:contain;border:0;background:#fff;border-radius:6px}
 .viewer .btn{align-self:flex-end;margin-bottom:8px}
@@ -212,7 +215,13 @@ footer{color:var(--muted);font-size:12px;text-align:center}
     </div>
   </details>
 
-  <footer>Receipt Log <span id="ver">v2.0.2</span> · tap a receipt to edit it</footer>
+  <footer>
+    <picture class="brand">
+      <source srcset="brand/logo-horizontal-white.svg" media="(prefers-color-scheme: dark)">
+      <img src="brand/logo-horizontal.svg" alt="Austin Bergquist" width="202" height="20">
+    </picture>
+    <div>Receipt Log <span id="ver">v2.1.0</span> · tap a receipt to edit it</div>
+  </footer>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
 <div class="viewer" id="viewer" hidden><button class="btn small" type="button" id="viewerClose">Close</button><div id="viewerBody" style="flex:1;min-height:0;display:flex"></div></div>
@@ -225,7 +234,7 @@ window.addEventListener("error",function(e){var s=document.getElementById("statu
 <script>
 (function(){
 "use strict";
-const APP_VERSION="2.0.2";
+const APP_VERSION="2.1.0";
 const CATEGORIES=ReceiptParser.CATEGORIES;
 const $=id=>document.getElementById(id);
 const money=c=>(c<0?"-":"")+"$"+(Math.abs(c)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
