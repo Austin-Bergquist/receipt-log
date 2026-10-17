@@ -4,6 +4,20 @@ Every past build is kept in `versions/`. To roll back, copy an older file over
 `index.html` (and `receipt-parser.js` if one is listed), upload, and bump `CACHE`
 in `sw.js` so phones pick it up. Receipts stored on your devices are not affected.
 
+## v2.2.0 — 2026-10-17 — Exports
+- Every receipt gets a number (R-0001, R-0002…), shown in the list and the edit screen. Existing
+  receipts are numbered automatically in date order.
+- New **Export** panel: date range (this/last month, quarter, year, all, or custom dates) and
+  filters for category, payment method, and "only receipts with images", with a live count and total.
+- **PDF report**: logo header, period and filters, totals, by-category summary, receipt table with
+  links to each receipt's image page, then one page per receipt photo or PDF.
+- **CSV + images (ZIP)**: `receipts.csv` plus `images/` named `R-0007_2026-10-14_Vendor_51.21.jpg`;
+  the CSV's Image file column matches each file name.
+- **CSV only**: now includes Receipt # and Image file columns and a total row.
+- On phones, exports open the share sheet (Files, Drive, email); on PC they download.
+- Backup & restore moved to its own panel. jsPDF 2.5.1 and JSZip 3.10.1 bundled in `vendor/`.
+- Files: `versions/receipt-log-v2.2.0.html`
+
 ## v2.1.0 — 2026-10-17 — Branding
 - Austin Bergquist logo (direction D, "signal wordmark") in the footer; switches to the white
   version in dark mode.

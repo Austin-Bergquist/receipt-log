@@ -1,6 +1,7 @@
 /*
   Receipt Log service worker — makes the app open offline.
   VERSION HISTORY (newest first)
+  v2.2.0  2026-10-17  Cache bump; PDF and ZIP libraries added to the offline set.
   v2.1.0  2026-10-17  Cache bump; logo files added to the offline set.
   v2.0.2  2026-10-17  Cache bump for the iPhone save fix.
   v2.0.1  2026-10-17  Cache bump for the iPhone fix.
@@ -8,7 +9,7 @@
                       and fonts cached the first time they're used.
   Bump CACHE when shipping a new version so phones pick up the update.
 */
-const CACHE = "receipt-log-v2.1.0";
+const CACHE = "receipt-log-v2.2.0";
 const SHELL = ["./", "index.html", "receipt-parser.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png",
   "brand/logo-horizontal.svg", "brand/logo-horizontal-white.svg"];
@@ -20,7 +21,8 @@ self.addEventListener("install", e => {
 // so receipt reading also works with no signal.
 const VENDOR = ["vendor/tesseract/tesseract.min.js", "vendor/tesseract/worker.min.js",
   "vendor/tesseract/core/tesseract-core-simd-lstm.wasm.js", "vendor/tesseract/core/tesseract-core-lstm.wasm.js",
-  "vendor/tesseract/lang/eng.traineddata.gz", "vendor/pdfjs/pdf.min.js", "vendor/pdfjs/pdf.worker.min.js"];
+  "vendor/tesseract/lang/eng.traineddata.gz", "vendor/pdfjs/pdf.min.js", "vendor/pdfjs/pdf.worker.min.js",
+  "vendor/jspdf/jspdf.umd.min.js", "vendor/jszip/jszip.min.js"];
 
 self.addEventListener("activate", e => {
   caches.open(CACHE).then(c => Promise.all(VENDOR.map(u => c.match(u).then(hit => hit || c.add(u))))).catch(() => {});

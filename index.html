@@ -12,6 +12,13 @@
   copying an older file over index.html. Your receipts live in the
   browser's on-device storage and are NOT touched by swapping versions.
 
+  v2.2.0  2026-10-17  Exports: receipt numbers (R-0001) on every receipt;
+                      Export panel with date range (presets + custom) and
+                      category / payment / has-image filters; PDF report
+                      (summary, by-category, receipt table, one page per
+                      image), ZIP (CSV + images named by receipt number),
+                      CSV with an Image file column. Backup moved to its
+                      own panel. jsPDF + JSZip bundled in vendor/.
   v2.1.0  2026-10-17  Branding: Austin Bergquist logo (signal wordmark) in
                       the footer, new AB home-screen icons. Logo files in brand/.
   v2.0.2  2026-10-17  iPhone save fix: reopens the on-device database when
@@ -125,6 +132,11 @@ input:focus-visible,select:focus-visible,button:focus-visible,label.btn:focus-wi
 details.data{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
 details.data summary{cursor:pointer;font-weight:600}
 details.data .inner{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;min-height:36px;cursor:pointer}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.ex-sum{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:14px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.chips .chip.mini{min-height:32px;padding:5px 10px;font-size:12.5px}
+.rnum{font-family:var(--font-num);font-size:11.5px;color:var(--muted);margin-right:6px}
 footer{color:var(--muted);font-size:12px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
 footer .brand img{display:block;height:20px;width:auto}
 .viewer{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:30;display:flex;flex-direction:column;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))}
@@ -201,12 +213,40 @@ footer .brand img{display:block;height:20px;width:auto}
     <div id="list"></div>
   </section>
 
+  <details class="data" id="exportPanel">
+    <summary>Export</summary>
+    <div class="inner">
+      <div class="grid2">
+        <div class="field"><label class="label" for="exPeriod">Date range</label>
+          <select id="exPeriod">
+            <option value="thisMonth">This month</option><option value="lastMonth">Last month</option>
+            <option value="thisQuarter">This quarter</option><option value="lastQuarter">Last quarter</option>
+            <option value="thisYear" selected>This year</option><option value="lastYear">Last year</option>
+            <option value="all">All receipts</option><option value="custom">Custom dates</option>
+          </select></div>
+        <div class="field" id="exCustom" hidden>
+          <span class="label">From – to</span>
+          <div style="display:flex;gap:6px"><input type="date" id="exFrom" aria-label="From date"><input type="date" id="exTo" aria-label="To date"></div>
+        </div>
+      </div>
+      <div class="field"><span class="label" id="exCatLabel">Categories</span><div class="chips" id="exCats" role="group" aria-labelledby="exCatLabel"></div></div>
+      <div class="field"><span class="label" id="exPayLabel">Paid with</span><div class="chips" id="exPays" role="group" aria-labelledby="exPayLabel"></div></div>
+      <label class="check"><input type="checkbox" id="exImgOnly"> Only receipts with a photo or PDF</label>
+      <div class="ex-sum" id="exSummary">No receipts in this range.</div>
+      <div class="actions">
+        <button class="btn primary" type="button" id="exPdf">PDF report</button>
+        <button class="btn small" type="button" id="exZip">CSV + images (ZIP)</button>
+        <button class="btn small" type="button" id="exCsv">CSV only</button>
+      </div>
+      <div class="sub" id="exMsg" role="status"></div>
+    </div>
+  </details>
+
   <details class="data">
-    <summary>Backup &amp; export</summary>
+    <summary>Backup &amp; restore</summary>
     <div class="inner">
       <div class="sub">Receipts are stored only on this device. Make a backup now and then, and use it to move receipts to another phone or computer.</div>
       <div class="actions">
-        <button class="btn small" type="button" id="csvBtn">Export CSV</button>
         <button class="btn small" type="button" id="backupBtn">Download backup</button>
         <label class="btn small" for="restoreFile">Restore from backup</label>
         <input id="restoreFile" type="file" accept=".json,application/json" hidden>
@@ -220,7 +260,7 @@ footer .brand img{display:block;height:20px;width:auto}
       <source srcset="brand/logo-horizontal-white.svg" media="(prefers-color-scheme: dark)">
       <img src="brand/logo-horizontal.svg" alt="Austin Bergquist" width="202" height="20">
     </picture>
-    <div>Receipt Log <span id="ver">v2.1.0</span> · tap a receipt to edit it</div>
+    <div>Receipt Log <span id="ver">v2.2.0</span> · tap a receipt to edit it</div>
   </footer>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -234,7 +274,7 @@ window.addEventListener("error",function(e){var s=document.getElementById("statu
 <script>
 (function(){
 "use strict";
-const APP_VERSION="2.1.0";
+const APP_VERSION="2.2.0";
 const CATEGORIES=ReceiptParser.CATEGORIES;
 const $=id=>document.getElementById(id);
 const money=c=>(c<0?"-":"")+"$"+(Math.abs(c)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -324,7 +364,7 @@ async function startEdit(r){
   attached=null; removedFileId=null;
   if(r.fileId){const f=await getOne("files",r.fileId).catch(()=>null);if(f)attached={id:f.id,blob:fileBlob(f),type:f.type,isNew:false}}
   showAttached();
-  $("formTitle").textContent="Edit receipt"; $("saveBtn").textContent="Save changes";
+  $("formTitle").textContent="Edit receipt "+rnum(r); $("saveBtn").textContent="Save changes";
   $("cancelEdit").hidden=false; $("deleteBtn").hidden=false; $("confirmDel").hidden=true; $("formErr").textContent="";
   $("slip").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"});
 }
@@ -346,7 +386,7 @@ $("slip").addEventListener("submit",async ev=>{
   const old=editingId?receipts.find(r=>r.id===editingId):null;
   const now=new Date().toISOString();
   const rec={id:editingId||uid(),cents,vendor:$("vendor").value.trim(),date:$("date").value,category,pay:$("pay").value,note:$("note").value.trim(),
-    fileId:attached?attached.id:null,fileType:attached?attached.type:null,createdAt:old?old.createdAt:now,updatedAt:now};
+    fileId:attached?attached.id:null,fileType:attached?attached.type:null,createdAt:old?old.createdAt:now,updatedAt:now,num:old&&old.num?old.num:nextNum()};
   $("saveBtn").disabled=true;
   try{
     if(attached&&attached.isNew)await putFile(attached.id,attached.blob,attached.type);
@@ -475,9 +515,15 @@ function apply(o){
 
 /* ---------- List ---------- */
 $("search").addEventListener("input",render); $("filterCat").addEventListener("change",render);
+// v2.2.0: every receipt gets a number (R-0001…) that ties the CSV row to its image file
+const rnum=r=>r&&r.num?"R-"+String(r.num).padStart(4,"0"):"";
+const nextNum=()=>receipts.reduce((m,r)=>Math.max(m,r.num||0),0)+1;
 async function load(){
-  receipts=(await getAll("receipts")).sort((a,b)=>b.date.localeCompare(a.date)||String(b.createdAt).localeCompare(String(a.createdAt)));
-  render();
+  receipts=await getAll("receipts");
+  const missing=receipts.filter(r=>!r.num).sort((a,b)=>a.date.localeCompare(b.date)||String(a.createdAt).localeCompare(String(b.createdAt)));
+  if(missing.length){let n=receipts.reduce((m,r)=>Math.max(m,r.num||0),0);for(const r of missing){r.num=++n;await put("receipts",r)}}
+  receipts.sort((a,b)=>b.date.localeCompare(a.date)||String(b.createdAt).localeCompare(String(a.createdAt)));
+  render(); exUpdate();
 }
 function render(){
   const now=new Date(),ym=today().slice(0,7),y=String(now.getFullYear());
@@ -505,7 +551,7 @@ function render(){
       const b=document.createElement("button");b.type="button";b.className="row";const d=new Date(r.date+"T12:00:00");
       b.innerHTML='<div class="day"><b></b><span></span></div><div class="who"><div class="vendor"></div><div class="meta"><span class="tag"></span><span class="m"></span></div></div><div class="amt"></div>';
       b.querySelector(".day b").textContent=d.getDate();b.querySelector(".day span").textContent=d.toLocaleDateString("en-US",{weekday:"short"});
-      b.querySelector(".vendor").textContent=r.vendor||"(no vendor)";b.querySelector(".tag").textContent=r.category;
+      b.querySelector(".vendor").innerHTML='<span class="rnum"></span><span class="vn"></span>';b.querySelector(".rnum").textContent=rnum(r);b.querySelector(".vn").textContent=r.vendor||"(no vendor)";b.querySelector(".tag").textContent=r.category;
       b.querySelector(".m").textContent=[r.pay,r.note,r.fileId?(r.fileType==="pdf"?"📎 PDF":"📎 photo"):""].filter(Boolean).join(" · ");
       b.querySelector(".amt").textContent=money(r.cents);
       b.onclick=()=>startEdit(r);box.appendChild(b);
@@ -518,13 +564,191 @@ function render(){
 /* ---------- Export / backup / restore ---------- */
 function saveFile(name,blob){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
-$("csvBtn").onclick=()=>{
-  if(!receipts.length){$("dataMsg").textContent="No receipts to export yet.";return}
-  const esc=v=>{v=v==null?"":String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
-  const rows=[["Date","Vendor","Category","Amount","Paid with","Note","Has image"]].concat(
-    receipts.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(r=>[r.date,r.vendor,r.category,(r.cents/100).toFixed(2),r.pay,r.note,r.fileId?"yes":""]));
-  saveFile("receipts-"+today()+".csv",new Blob([rows.map(r=>r.map(esc).join(",")).join("\r\n")],{type:"text/csv"}));
-  $("dataMsg").textContent="CSV downloaded.";
+/* ---------- Export (v2.2.0): date range, filters, PDF report / ZIP / CSV ---------- */
+const PAYS=[...$("pay").options].map(o=>o.value);
+let exCats=new Set(CATEGORIES), exPays=new Set(PAYS);
+const pad2=n=>String(n).padStart(2,"0");
+const ymd=x=>x.getFullYear()+"-"+pad2(x.getMonth()+1)+"-"+pad2(x.getDate());
+const fmtDate=s=>new Date(s+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+
+function drawExChips(box,all,set){
+  box.innerHTML="";
+  const mk=(label,pressed,on)=>{const b=document.createElement("button");b.type="button";b.className="chip mini";b.textContent=label;
+    b.setAttribute("aria-pressed",String(pressed));b.onclick=on;box.appendChild(b)};
+  mk("All",set.size===all.length,()=>{if(set.size===all.length)set.clear();else all.forEach(x=>set.add(x));drawExChips(box,all,set);exUpdate()});
+  all.forEach(x=>mk(x,set.has(x)&&set.size!==all.length,()=>{
+    if(set.size===all.length){set.clear();set.add(x)}            // from "All", tapping one picks just that one
+    else if(set.has(x)){set.delete(x);if(!set.size)all.forEach(y=>set.add(y))}
+    else set.add(x);
+    drawExChips(box,all,set);exUpdate()}));
+}
+function exRange(){
+  const v=$("exPeriod").value,t=new Date(),y=t.getFullYear(),m=t.getMonth(),q=Math.floor(m/3);
+  const d=(Y,M,D)=>ymd(new Date(Y,M,D));
+  const R={thisMonth:[d(y,m,1),d(y,m+1,0)],lastMonth:[d(y,m-1,1),d(y,m,0)],thisQuarter:[d(y,q*3,1),d(y,q*3+3,0)],
+    lastQuarter:[d(y,q*3-3,1),d(y,q*3,0)],thisYear:[d(y,0,1),d(y,11,31)],lastYear:[d(y-1,0,1),d(y-1,11,31)],
+    all:["0000-01-01","9999-12-31"],custom:[$("exFrom").value||"0000-01-01",$("exTo").value||"9999-12-31"]}[v];
+  let label;
+  if(v==="all")label="All receipts";
+  else if(v==="custom"&&!$("exFrom").value&&!$("exTo").value)label="All dates";
+  else label=(R[0]==="0000-01-01"?"Start":fmtDate(R[0]))+" – "+(R[1]==="9999-12-31"?"today":fmtDate(R[1]));
+  const slug=v==="all"?"all":(R[0]==="0000-01-01"?"start":R[0])+"_to_"+(R[1]==="9999-12-31"?today():R[1]);
+  return {from:R[0],to:R[1],label,slug};
+}
+function exSelected(){
+  const {from,to}=exRange(),img=$("exImgOnly").checked;
+  const allC=exCats.size===CATEGORIES.length,allP=exPays.size===PAYS.length;
+  return receipts.filter(r=>r.date>=from&&r.date<=to&&(allC||exCats.has(r.category))&&(allP||exPays.has(r.pay))&&(!img||r.fileId))
+    .sort((a,b)=>a.date.localeCompare(b.date)||(a.num||0)-(b.num||0));
+}
+function exFilterText(){
+  const parts=[];
+  parts.push("Categories: "+(exCats.size===CATEGORIES.length?"all":[...exCats].join(", ")));
+  parts.push("Paid with: "+(exPays.size===PAYS.length?"all":[...exPays].join(", ")));
+  if($("exImgOnly").checked)parts.push("Only receipts with images");
+  return parts;
+}
+function exUpdate(){
+  if(!$("exSummary"))return;
+  const sel=exSelected(),tot=sel.reduce((a,r)=>a+r.cents,0),im=sel.filter(r=>r.fileId).length;
+  $("exSummary").textContent=sel.length?(sel.length+" receipt"+(sel.length===1?"":"s")+" · "+money(tot)+" · "+im+" with images · "+exRange().label):"No receipts match. "+exRange().label;
+  ["exPdf","exZip","exCsv"].forEach(id=>$(id).disabled=!sel.length);
+}
+$("exPeriod").addEventListener("change",()=>{$("exCustom").hidden=$("exPeriod").value!=="custom";exUpdate()});
+["exFrom","exTo","exImgOnly"].forEach(id=>$(id).addEventListener("change",exUpdate));
+drawExChips($("exCats"),CATEGORIES,exCats); drawExChips($("exPays"),PAYS,exPays);
+
+const slugify=s=>(String(s||"").normalize("NFKD").replace(/[^\w\s-]/g,"").trim().replace(/[\s_]+/g,"-").slice(0,32))||"receipt";
+function imgName(r){if(!r.fileId)return "";return rnum(r)+"_"+r.date+"_"+slugify(r.vendor)+"_"+(r.cents/100).toFixed(2)+"."+(r.fileType==="pdf"?"pdf":"jpg")}
+function buildCsv(sel){
+  const esc=v=>{v=v==null?"":String(v);return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=[["Receipt #","Date","Vendor","Category","Amount","Paid with","Note","Image file"]]
+    .concat(sel.map(r=>[rnum(r),r.date,r.vendor,r.category,(r.cents/100).toFixed(2),r.pay,r.note,imgName(r)]));
+  rows.push(["","","","Total",(sel.reduce((a,r)=>a+r.cents,0)/100).toFixed(2),"","",""]);
+  return "﻿"+rows.map(r=>r.map(esc).join(",")).join("\r\n");   // BOM so Excel reads it as UTF-8
+}
+async function saveOut(name,blob){
+  // phones: offer the share sheet (save to Files/Drive, email…); fall back to a normal download
+  try{
+    const file=new File([blob],name,{type:blob.type});
+    if(matchMedia("(pointer:coarse)").matches&&navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});return "shared"}
+  }catch(e){if(e&&e.name==="AbortError")return "cancelled"}
+  saveFile(name,blob);return "saved";
+}
+function exBusy(on,msg){["exPdf","exZip","exCsv"].forEach(id=>$(id).disabled=on);$("exMsg").textContent=msg||"";if(!on)exUpdate()}
+async function getFileFor(r){const f=r.fileId?await getOne("files",r.fileId).catch(()=>null):null;return f?fileBlob(f):null}
+
+$("exCsv").onclick=async()=>{
+  const sel=exSelected();if(!sel.length)return;
+  const res=await saveOut("receipts_"+exRange().slug+".csv",new Blob([buildCsv(sel)],{type:"text/csv"}));
+  $("exMsg").textContent=res==="cancelled"?"":"CSV ready: "+sel.length+" receipts. The Image file column names each receipt's image in the ZIP export.";
+};
+$("exZip").onclick=async()=>{
+  const sel=exSelected();if(!sel.length)return;
+  exBusy(true,"Building ZIP…");
+  try{
+    await loadScript(abs("vendor/jszip/jszip.min.js"));
+    const zip=new JSZip(),folder=zip.folder("images");let n=0;
+    for(const r of sel){if(!r.fileId)continue;const b=await getFileFor(r);if(b){folder.file(imgName(r),b);n++}}
+    zip.file("receipts.csv",buildCsv(sel));
+    const blob=await zip.generateAsync({type:"blob",mimeType:"application/zip"});
+    const res=await saveOut("receipts_"+exRange().slug+".zip",blob);
+    exBusy(false,res==="cancelled"?"":"ZIP ready: receipts.csv plus "+n+" image"+(n===1?"":"s")+" named by receipt number.");
+  }catch(e){exBusy(false,"Couldn't build the ZIP: "+(e.message||e))}
+};
+
+// ---- PDF report ----
+async function toJpeg(blob,type){
+  let c;
+  if(type==="pdf"){c=(await pdfToImage(blob)).canvas}
+  else{const img=await blobToImage(blob);const s=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
+    c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);
+    const x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height)}
+  return {data:c.toDataURL("image/jpeg",0.82),w:c.width,h:c.height};
+}
+async function logoPng(){
+  try{const img=await new Promise((ok,bad)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=bad;i.src=abs("brand/logo-horizontal.svg")});
+    const c=document.createElement("canvas");c.width=1012;c.height=100;c.getContext("2d").drawImage(img,0,0,1012,100);return c.toDataURL("image/png")}catch(e){return null}
+}
+$("exPdf").onclick=async()=>{
+  const sel=exSelected();if(!sel.length)return;
+  exBusy(true,"Building PDF…");
+  try{
+    await loadScript(abs("vendor/jspdf/jspdf.umd.min.js"));
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({unit:"pt",format:"letter"});
+    const W=612,H=792,M=48,INK=[21,32,31],MUT=[92,107,106],GRN=[31,111,92],LN=[213,220,220];
+    const col=c=>doc.setTextColor(c[0],c[1],c[2]);
+    const rng=exRange(),tot=sel.reduce((a,r)=>a+r.cents,0),withImg=sel.filter(r=>r.fileId);
+    // header
+    const logo=await logoPng();
+    if(logo)doc.addImage(logo,"PNG",M,M,182,18);
+    doc.setFont("helvetica","bold");doc.setFontSize(20);col(INK);doc.text("Receipt report",W-M,M+15,{align:"right"});
+    let y=M+52;
+    doc.setFont("helvetica","normal");doc.setFontSize(10);col(MUT);
+    [["Period",rng.label],["Filters",exFilterText().join(" · ")],["Generated",fmtDate(today())]].forEach(([k,v])=>{
+      doc.setFont("helvetica","bold");doc.text(k,M,y);doc.setFont("helvetica","normal");
+      const lines=doc.splitTextToSize(v,W-2*M-70);doc.text(lines,M+70,y);y+=14*lines.length});
+    // summary band
+    y+=8;doc.setFillColor(238,241,242);doc.rect(M,y,W-2*M,54,"F");
+    const stat=(x,label,val)=>{doc.setFontSize(8);col(MUT);doc.setFont("helvetica","bold");doc.text(label.toUpperCase(),x,y+18);
+      doc.setFont("courier","bold");doc.setFontSize(16);col(INK);doc.text(val,x,y+40)};
+    stat(M+14,"Total",money(tot));stat(M+190,"Receipts",String(sel.length));stat(M+340,"With images",String(withImg.length));
+    y+=78;
+    // by category
+    doc.setFont("helvetica","bold");doc.setFontSize(12);col(INK);doc.text("By category",M,y);y+=8;
+    const byCat={};sel.forEach(r=>{const k=r.category||"Other";byCat[k]=byCat[k]||{n:0,c:0};byCat[k].n++;byCat[k].c+=r.cents});
+    doc.setFontSize(10);
+    Object.entries(byCat).sort((a,b)=>b[1].c-a[1].c).forEach(([k,v])=>{
+      y+=16;doc.setFont("helvetica","normal");col(INK);doc.text(k,M,y);col(MUT);doc.text(v.n+" receipt"+(v.n===1?"":"s"),M+200,y);
+      doc.setFont("courier","bold");col(INK);doc.text(money(v.c),M+360,y,{align:"right"});
+      doc.setDrawColor(LN[0],LN[1],LN[2]);doc.line(M,y+5,M+360,y+5)});
+    y+=36;
+    // receipts table
+    const X={no:M,date:M+48,vendor:M+116,cat:M+262,pay:M+352,amt:M+470,img:M+478};
+    const head=()=>{doc.setFont("helvetica","bold");doc.setFontSize(8);col(MUT);
+      doc.text("NO.",X.no,y);doc.text("DATE",X.date,y);doc.text("VENDOR",X.vendor,y);doc.text("CATEGORY",X.cat,y);doc.text("PAID WITH",X.pay,y);
+      doc.text("AMOUNT",X.amt,y,{align:"right"});doc.text("IMAGE",X.img,y);doc.setDrawColor(INK[0],INK[1],INK[2]);doc.line(M,y+5,W-M,y+5);y+=18};
+    doc.setFont("helvetica","bold");doc.setFontSize(12);col(INK);doc.text("Receipts",M,y);y+=18;head();
+    const fit=(t,w)=>{t=String(t||"");if(doc.getTextWidth(t)<=w)return t;while(t.length&&doc.getTextWidth(t+"…")>w)t=t.slice(0,-1);return t+"…"};
+    const refs=[];
+    sel.forEach(r=>{
+      if(y>H-70){doc.addPage();y=M+10;head()}
+      doc.setFont("courier","normal");doc.setFontSize(9);col(MUT);doc.text(rnum(r),X.no,y);
+      doc.setFont("helvetica","normal");col(INK);doc.text(r.date,X.date,y);doc.text(fit(r.vendor||"(no vendor)",140),X.vendor,y);
+      col(MUT);doc.text(fit(r.category,84),X.cat,y);doc.text(fit(r.pay,100),X.pay,y);
+      doc.setFont("courier","bold");col(INK);doc.text(money(r.cents),X.amt,y,{align:"right"});
+      if(r.fileId)refs.push({r,page:doc.getCurrentPageInfo().pageNumber,y});
+      if(r.note){y+=11;doc.setFont("helvetica","italic");doc.setFontSize(8);col(MUT);doc.text(fit(r.note,330),X.vendor,y)}
+      doc.setDrawColor(LN[0],LN[1],LN[2]);doc.line(M,y+5,W-M,y+5);y+=16;
+    });
+    if(y>H-70){doc.addPage();y=M+10}
+    doc.setFont("helvetica","bold");doc.setFontSize(10);col(INK);doc.text("Total",X.pay,y+4);
+    doc.setFont("courier","bold");doc.text(money(tot),X.amt,y+4,{align:"right"});
+    // one page per receipt image
+    let done=0;
+    for(const ref of refs){
+      const r=ref.r;$("exMsg").textContent="Adding images… "+(++done)+" of "+refs.length;
+      const b=await getFileFor(r);if(!b)continue;
+      let im;try{im=await toJpeg(b,r.fileType)}catch(e){continue}
+      doc.addPage();ref.target=doc.getCurrentPageInfo().pageNumber;
+      doc.setFont("courier","bold");doc.setFontSize(12);col(GRN);doc.text(rnum(r),M,M+6);
+      doc.setFont("helvetica","bold");col(INK);doc.text(fit(r.vendor||"(no vendor)",300),M+70,M+6);
+      doc.setFont("courier","bold");doc.text(money(r.cents),W-M,M+6,{align:"right"});
+      doc.setFont("helvetica","normal");doc.setFontSize(9);col(MUT);
+      doc.text([fmtDate(r.date),r.category,r.pay,r.note].filter(Boolean).join(" · "),M+70,M+20);
+      const bx=M,by=M+36,bw=W-2*M,bh=H-M-30-by,s=Math.min(bw/im.w,bh/im.h),iw=im.w*s,ih=im.h*s;
+      doc.addImage(im.data,"JPEG",bx+(bw-iw)/2,by,iw,ih);
+    }
+    // write the image page numbers back into the table, then footers
+    refs.forEach(ref=>{if(!ref.target)return;doc.setPage(ref.page);doc.setFont("helvetica","normal");doc.setFontSize(9);col(GRN);
+      doc.textWithLink("p. "+ref.target,X.img,ref.y,{pageNumber:ref.target})});
+    const N=doc.getNumberOfPages();
+    for(let i=1;i<=N;i++){doc.setPage(i);doc.setFont("helvetica","normal");doc.setFontSize(8);col(MUT);
+      doc.text("Austin Bergquist · Receipt Log v"+APP_VERSION+" · "+rng.label,M,H-24);doc.text("Page "+i+" of "+N,W-M,H-24,{align:"right"})}
+    const res=await saveOut("receipt-report_"+rng.slug+".pdf",doc.output("blob"));
+    exBusy(false,res==="cancelled"?"":"PDF ready: "+sel.length+" receipts, "+refs.length+" image pages.");
+  }catch(e){exBusy(false,"Couldn't build the PDF: "+(e.message||e))}
 };
 const b2d=b=>new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});
 $("backupBtn").onclick=async()=>{
@@ -544,7 +768,7 @@ $("restoreFile").addEventListener("change",async()=>{
     let added=0,updated=0;
     for(const fl of data.files||[]){const blob=await (await fetch(fl.data)).blob();await putFile(fl.id,blob,fl.type)}
     for(const r of data.receipts){const ex=receipts.find(x=>x.id===r.id);
-      if(!ex){await put("receipts",r);added++}else if(String(r.updatedAt)>String(ex.updatedAt)){await put("receipts",r);updated++}}
+      if(!ex){if(r.num&&receipts.some(x=>x.num===r.num))r.num=nextNum();/* no number yet: load() numbers them by date */receipts.push(r);await put("receipts",r);added++}else if(String(r.updatedAt)>String(ex.updatedAt)){await put("receipts",r);updated++}}
     await load();
     $("dataMsg").textContent="Restored: "+added+" new, "+updated+" updated. Receipts already here were kept.";
   }catch(e){$("dataMsg").textContent="That file couldn't be restored: "+e.message+"."}
