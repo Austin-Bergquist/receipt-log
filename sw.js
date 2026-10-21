@@ -1,6 +1,7 @@
 /*
   Receipt Log service worker — makes the app open offline.
   VERSION HISTORY (newest first)
+  v2.3.0  2026-10-21  Cache bump for the new app icon.
   v2.2.1  2026-10-17  Cache bump; symbol added to the offline set.
   v2.2.0  2026-10-17  Cache bump; PDF and ZIP libraries added to the offline set.
   v2.1.0  2026-10-17  Cache bump; logo files added to the offline set.
@@ -10,9 +11,9 @@
                       and fonts cached the first time they're used.
   Bump CACHE when shipping a new version so phones pick up the update.
 */
-const CACHE = "receipt-log-v2.2.1";
+const CACHE = "receipt-log-v2.3.0";
 const SHELL = ["./", "index.html", "receipt-parser.js", "manifest.webmanifest",
-  "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png",
+  "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png", "icons/favicon-32.png",
   "brand/logo-horizontal.svg", "brand/logo-horizontal-white.svg", "brand/symbol.svg"];
 
 self.addEventListener("install", e => {

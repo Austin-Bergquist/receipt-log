@@ -4,6 +4,15 @@ Every past build is kept in `versions/`. To roll back, copy an older file over
 `index.html` (and `receipt-parser.js` if one is listed), upload, and bump `CACHE`
 in `sw.js` so phones pick it up. Receipts stored on your devices are not affected.
 
+## v2.3.0 — 2026-10-21 — App icon
+- New Receipt Log app icon (canvas option E): a receipt standing behind a tilted log with bark
+  grain, a knot, and the cut face showing its rings, on the brand green tile. Source:
+  `brand/app-icon.svg`.
+- Replaced the home-screen / install icons (192, 512, maskable 512, Apple 180) and added a
+  32px tab icon. The Austin Bergquist logo stays in the footer.
+- Previous "AB" icons kept in `versions/icons-v2.1.0/`.
+- Files: `versions/receipt-log-v2.3.0.html`
+
 ## v2.2.1 — 2026-10-17 — Name-free reports
 - PDF report header uses the signal symbol (`brand/symbol.svg`: white pulse on a green tile)
   instead of the "Austin Bergquist" logo; the page footer reads "Receipt Log vX · period".

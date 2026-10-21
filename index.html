@@ -12,6 +12,9 @@
   copying an older file over index.html. Your receipts live in the
   browser's on-device storage and are NOT touched by swapping versions.
 
+  v2.3.0  2026-10-21  New app icon: a receipt standing behind a tilted log
+                      (brand/app-icon.svg). Home-screen, install and tab icons
+                      replaced; brand logo in the footer unchanged.
   v2.2.1  2026-10-17  PDF report uses the signal symbol (brand/symbol.svg)
                       instead of the name logo, and the footer drops the
                       name, so reports suit anyone using the app.
@@ -46,8 +49,9 @@
 <meta name="theme-color" content="#1f6f5c">
 <meta name="description" content="Quick receipt entry for business expenses. Works offline.">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icons/icon-192.png">
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=2.3.0">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png?v=2.3.0">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=2.3.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Receipts">
@@ -263,7 +267,7 @@ footer .brand img{display:block;height:20px;width:auto}
       <source srcset="brand/logo-horizontal-white.svg" media="(prefers-color-scheme: dark)">
       <img src="brand/logo-horizontal.svg" alt="Austin Bergquist" width="202" height="20">
     </picture>
-    <div>Receipt Log <span id="ver">v2.2.1</span> · tap a receipt to edit it</div>
+    <div>Receipt Log <span id="ver">v2.3.0</span> · tap a receipt to edit it</div>
   </footer>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
@@ -277,7 +281,7 @@ window.addEventListener("error",function(e){var s=document.getElementById("statu
 <script>
 (function(){
 "use strict";
-const APP_VERSION="2.2.1";
+const APP_VERSION="2.3.0";
 const CATEGORIES=ReceiptParser.CATEGORIES;
 const $=id=>document.getElementById(id);
 const money=c=>(c<0?"-":"")+"$"+(Math.abs(c)/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
